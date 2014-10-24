@@ -1,0 +1,4 @@
+elements-dir footprints
+schematics buck-converter.sch
+output-name buck-converter
+
