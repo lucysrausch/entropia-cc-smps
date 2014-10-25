@@ -1,0 +1,4 @@
+elements-dir footprints
+schematics buck-pmos.sch
+output-name buck-pmos
+
