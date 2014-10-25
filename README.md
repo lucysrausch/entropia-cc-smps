@@ -9,6 +9,10 @@ current boost circuits. Switching frequencies are kept low to simplify PCB
 design, at the expense of high EMI. Input voltages are constrained to less
 than 30V for use in low voltage solar powered installations.
 
+The circuits are intended to demonstrate basic SMPS operations and to
+investigate a range of issues such as management of EMI. In time it is hoped
+to provide useful working circuits.
+
 More information is provided at:
 
 http://www.jiggerjuice.info/electronics/projects/power/index.html
