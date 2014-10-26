@@ -49,7 +49,7 @@ device=DIODE
 T 44600 46400 5 10 1 1 180 0 1
 refdes=D1
 T 44600 46200 5 10 0 0 0 0 1
-footprint=ALF300
+footprint=DO-35
 }
 C 43000 47100 1 270 0 capacitor-4.sym
 {

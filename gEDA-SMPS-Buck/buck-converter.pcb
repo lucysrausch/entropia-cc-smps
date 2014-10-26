@@ -6,7 +6,7 @@ FileVersion[20070407]
 PCB["" 130000 160000]
 
 Grid[100.0 0 0 0]
-Cursor[130000 51600 0.000000]
+Cursor[3800 8900 0.000000]
 PolyArea[200000000.000000]
 Thermal[0.500000]
 DRC[600 600 600 600 1500 600]
@@ -799,7 +799,7 @@ Element["" "RCY100P" "C3" "unknown" 47500 90000 -5000 -10000 0 100 ""]
 
 	)
 
-Element["" "SIP2N" "CONN2" "unknown" 50000 10000 0 -10000 0 100 ""]
+Element["" "SIP2N" "CONN2" "unknown" 50000 10000 -4800 -10100 0 100 ""]
 (
 	Pin[0 0 7000 3000 7000 3800 "1" "1" "square,edge2"]
 	Pin[10000 0 7000 3000 7000 3800 "2" "2" "edge2,thermal(1X)"]
@@ -889,19 +889,6 @@ Element["" "CK05_type_Capacitor" "C2" "unknown" 55000 70000 3000 -33500 3 150 ""
 	ElementLine [-5000 -20000 -4500 -20000 1000]
 	ElementLine [-5000 -20000 -5000 0 1000]
 	ElementLine [-5000 0 -4500 0 1000]
-
-	)
-
-Element["" "ALF300" "D1" "unknown" 35000 87500 -15000 0 1 100 ""]
-(
-	Pin[0 0 5000 3000 5600 2000 "1" "1" "square,thermal(1X)"]
-	Pin[0 -30000 5000 3000 5600 2000 "2" "2" ""]
-	ElementLine [0 -10000 0 0 1000]
-	ElementLine [0 -30000 0 -20000 1000]
-	ElementLine [0 -10000 -5000 -20000 1000]
-	ElementLine [-5000 -20000 5000 -20000 1000]
-	ElementLine [5000 -20000 0 -10000 1000]
-	ElementLine [-5000 -10000 5000 -10000 1000]
 
 	)
 
@@ -1005,6 +992,22 @@ Element["" "Single Large Terminal Pad" "" "" 120000 150000 15000 10000 3 100 ""]
 	Pin[0 0 6000 7000 -14000 4400 "a" "1" ""]
 
 	)
+
+Element["" "DO-35" "D1" "unknown" 34500 73100 -10259 8476 1 100 ""]
+(
+	Pin[0 15000 8000 2000 7500 4000 "1" "1" "thermal(0X,1X)"]
+	Pin[0 -15000 8000 2000 7500 4000 "2" "2" ""]
+	ElementLine [-3259 8476 3259 8476 1000]
+	ElementLine [0 8476 0 10750 1000]
+	ElementLine [-3259 -8476 -3259 8476 1000]
+	ElementLine [-3259 -8476 3259 -8476 1000]
+	ElementLine [0 -10750 0 -8476 1000]
+	ElementLine [3259 -8476 3259 8476 1000]
+	ElementLine [-3259 5476 3259 5476 1000]
+	ElementLine [-3259 4976 3259 4976 1000]
+	ElementLine [-3259 4476 3259 4476 1000]
+
+	)
 Layer(1 "top")
 (
 	Line[50000 10000 30858 10000 4000 2000 "clearline"]
@@ -1066,10 +1069,11 @@ Layer(9 "silk")
 )
 Layer(10 "silk")
 (
-	Text[64500 113000 0 100 "Buck Converter Basic" "clearline"]
 	Text[56500 120000 0 100 "K. W. Sarkies 24/10/2014" "clearline"]
 	Text[72000 126000 0 100 "Version 0.0" "clearline"]
 	Text[63500 133000 0 100 "Licence cc-by-sa" "clearline"]
+	Text[70000 1700 0 100 "Buck Converter" "clearline"]
+	Text[79600 8400 0 100 "Basic" "clearline"]
 	Polygon("pin,via")
 	(
 		[84977 139486] [84894 139518] [84847 139594] [84798 139833] [84761 140055] 

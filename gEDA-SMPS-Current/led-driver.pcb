@@ -6,7 +6,7 @@ FileVersion[20070407]
 PCB["" 130000 160000]
 
 Grid[500.0 0 0 0]
-Cursor[0 18500 0.000000]
+Cursor[0 15500 0.000000]
 PolyArea[200000000.000000]
 Thermal[0.500000]
 DRC[600 600 600 600 1500 600]
@@ -913,19 +913,6 @@ Element["" "CK05_type_Capacitor" "C2" "unknown" 55000 70000 3000 -33500 3 150 ""
 
 	)
 
-Element["" "ALF300" "D1" "unknown" 34500 88500 -15000 0 1 100 ""]
-(
-	Pin[0 0 5000 3000 5600 2000 "1" "1" "square,thermal(1X)"]
-	Pin[0 -30000 5000 3000 5600 2000 "2" "2" ""]
-	ElementLine [0 -10000 0 0 1000]
-	ElementLine [0 -30000 0 -20000 1000]
-	ElementLine [0 -10000 -5000 -20000 1000]
-	ElementLine [-5000 -20000 5000 -20000 1000]
-	ElementLine [5000 -20000 0 -10000 1000]
-	ElementLine [-5000 -10000 5000 -10000 1000]
-
-	)
-
 Element["" "RCY200" "L1" "unknown" 15536 28180 -13536 -13180 0 100 ""]
 (
 	Pin[0 0 6000 3000 6600 3000 "1" "1" "square"]
@@ -1037,6 +1024,23 @@ Element["" "Single Large Terminal Pad" "" "" 10000 10000 15000 10000 3 100 ""]
 	Pin[0 0 6000 7000 -14000 4400 "a" "1" ""]
 
 	)
+
+Element["" "DO-35" "D1" "unknown" 34500 73500 -10259 8476 1 100 ""]
+(
+	Pin[0 15000 8000 2000 7500 4000 "1" "1" "thermal(1X)"]
+	Pin[0 -15000 8000 2000 7500 4000 "2" "2" ""]
+	ElementLine [-3259 8476 3259 8476 1000]
+	ElementLine [0 8476 0 10750 1000]
+	ElementLine [-3259 -8476 -3259 8476 1000]
+	ElementLine [-3259 -8476 3259 -8476 1000]
+	ElementLine [0 -10750 0 -8476 1000]
+	ElementLine [3259 -8476 3259 8476 1000]
+	ElementLine [-3259 5476 3259 5476 1000]
+	ElementLine [-3259 4976 3259 4976 1000]
+	ElementLine [-3259 4476 3259 4476 1000]
+
+	)
+Rat[59500 10000 1 70500 15000 1  ""]
 Layer(1 "top")
 (
 	Line[49500 10000 35003 10000 4000 2000 "clearline"]
@@ -1104,9 +1108,9 @@ Layer(9 "silk")
 )
 Layer(10 "silk")
 (
-	Text[74300 88200 0 100 "LED Driver" "clearline"]
 	Text[1200 153600 1 100 "K. W. Sarkies 24/10/2014" "clearline"]
-	Text[121200 156700 1 100 "Version 0.0 Licence cc-by-sa" "clearline"]
+	Text[129800 66300 3 100 "Version 0.0 Licence cc-by-sa" "clearline"]
+	Text[75800 2200 0 100 "LED Driver" "clearline"]
 	Polygon("pin,via")
 	(
 		[54977 17486] [54894 17518] [54847 17594] [54798 17833] [54761 18055] 
