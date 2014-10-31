@@ -50,7 +50,7 @@ device=DIODE
 T 43000 46300 5 10 1 1 180 0 1
 refdes=D1
 T 43000 46100 5 10 0 0 0 0 1
-footprint=DO-35
+footprint=DO-41
 }
 C 41400 47000 1 270 0 capacitor-4.sym
 {
