@@ -2,7 +2,7 @@ SMPS LED Driver
 ---------------
 
 This project provides a small LED driver circuit using a common switch mode
-IC MC34063. Output current is limited to 1.5A.
+IC MC34063 in a constant current configuration.
 
 More information is provided at:
 

@@ -1,0 +1,1140 @@
+   1               		.file	"smps-batterycharger-attiny461.c"
+   2               	__SP_H__ = 0x3e
+   3               	__SP_L__ = 0x3d
+   4               	__SREG__ = 0x3f
+   5               	__tmp_reg__ = 0
+   6               	__zero_reg__ = 1
+   9               		.text
+  10               	.Ltext0:
+  70               		.section	.text.startup,"ax",@progbits
+  72               	.global	main
+  74               	main:
+  75               		.stabd	46,0,0
+   1:smps-batterycharger-attiny461.c **** /**
+   2:smps-batterycharger-attiny461.c **** @mainpage SMPS Project on ATTiny461
+   3:smps-batterycharger-attiny461.c **** @version 1.0.0
+   4:smps-batterycharger-attiny461.c **** @author Ken Sarkies (www.jiggerjuice.net)
+   5:smps-batterycharger-attiny461.c **** @date 29 June 2010
+   6:smps-batterycharger-attiny461.c **** @brief Code for an SMPS full H-bridge buck-boost Battery Charger on ATTiny261/461/861
+   7:smps-batterycharger-attiny461.c **** 
+   8:smps-batterycharger-attiny461.c **** This is an implementation of an SMPS synchronous buck regulator in the full
+   9:smps-batterycharger-attiny461.c **** H-bridge configuration, using p-type MOSFETs for the high-side switches.
+  10:smps-batterycharger-attiny461.c **** A timer is used in fast PWM mode. The PWM output and inverted output for two
+  11:smps-batterycharger-attiny461.c **** compare registers control the four MOSFETs with deadtime. The voltage
+  12:smps-batterycharger-attiny461.c **** and current feedback is converted internally and used to vary the duty cycle
+  13:smps-batterycharger-attiny461.c **** of the enable signals.
+  14:smps-batterycharger-attiny461.c **** 
+  15:smps-batterycharger-attiny461.c **** To be used with the high PMOS version.
+  16:smps-batterycharger-attiny461.c **** 
+  17:smps-batterycharger-attiny461.c **** A range of protection functions is implemented, including current overload,
+  18:smps-batterycharger-attiny461.c **** short-circuit detection, brown-out and watchdog timer resets.
+  19:smps-batterycharger-attiny461.c **** 
+  20:smps-batterycharger-attiny461.c **** The A/D converter is operated at its maximum rate of 1MHz which means that
+  21:smps-batterycharger-attiny461.c **** the resolution is limited to only 8 bits. Conversion time is 13 microseconds.
+  22:smps-batterycharger-attiny461.c **** The reference voltage used is the internal analogue 5V supply.
+  23:smps-batterycharger-attiny461.c **** 
+  24:smps-batterycharger-attiny461.c **** A 2.56V internal reference is used on all measurement channels. Differential
+  25:smps-batterycharger-attiny461.c **** measurement would be very flexible but they require twice the settling time
+  26:smps-batterycharger-attiny461.c **** of the single ended channels, so that the high conversion speed is effectively
+  27:smps-batterycharger-attiny461.c **** nullified.
+  28:smps-batterycharger-attiny461.c **** 
+  29:smps-batterycharger-attiny461.c **** The feedback circuits attenuate the input and output voltages by 0.145.
+  30:smps-batterycharger-attiny461.c **** The load current is amplified by 10 to give 1V per ampere. So the scaling
+  31:smps-batterycharger-attiny461.c **** factor is 14.5 for voltages and 100 for currents.
+  32:smps-batterycharger-attiny461.c **** 
+  33:smps-batterycharger-attiny461.c **** For the sealed lead-acid battery, current is limited to 0.3C and the voltage
+  34:smps-batterycharger-attiny461.c **** to 2.5V per cell until the current drops to 0.05C at which time it switches
+  35:smps-batterycharger-attiny461.c **** to 2.3V per cell.
+  36:smps-batterycharger-attiny461.c **** 
+  37:smps-batterycharger-attiny461.c **** The software is specifically designed for a 12V 7.5AH Diamec cell.
+  38:smps-batterycharger-attiny461.c **** When a load current is detected, the charger turns off and the load is served
+  39:smps-batterycharger-attiny461.c **** by the battery alone. The charger is reconnected when the load is disconnected.
+  40:smps-batterycharger-attiny461.c **** 
+  41:smps-batterycharger-attiny461.c **** ADC3 Vin
+  42:smps-batterycharger-attiny461.c **** ADC4 Vbatt
+  43:smps-batterycharger-attiny461.c **** ADC5 Ibatt
+  44:smps-batterycharger-attiny461.c **** ADC6 Iload
+  45:smps-batterycharger-attiny461.c **** 
+  46:smps-batterycharger-attiny461.c **** PB2 Buck Upper  iOC1B
+  47:smps-batterycharger-attiny461.c **** PB3 Buck Lower   OC1B
+  48:smps-batterycharger-attiny461.c **** PB4 Boost Upper iOC1D
+  49:smps-batterycharger-attiny461.c **** PB6 Boost Lower  OC1D
+  50:smps-batterycharger-attiny461.c **** 
+  51:smps-batterycharger-attiny461.c **** The algorithm starts by measuring the battery voltage and then sets the voltage
+  52:smps-batterycharger-attiny461.c **** and current to charge at a low rate (1 amp) with the boost upper MOSFET turned
+  53:smps-batterycharger-attiny461.c **** off, being replaced by the Schottky diode. When the output voltage rises above
+  54:smps-batterycharger-attiny461.c **** the measured battery voltage, and the current increases above 500mA, the MOSFET
+  55:smps-batterycharger-attiny461.c **** is switched in to bypass the diode, thus reducing dissipated power. The normal
+  56:smps-batterycharger-attiny461.c **** charging algorithm is implemented after that, but for safety if the output drops
+  57:smps-batterycharger-attiny461.c **** below the initial measured battery voltage and the current drops below 100mA the
+  58:smps-batterycharger-attiny461.c **** MOSFET is turned off again.
+  59:smps-batterycharger-attiny461.c **** 
+  60:smps-batterycharger-attiny461.c **** @note
+  61:smps-batterycharger-attiny461.c **** Software: AVR-GCC 3.4.5
+  62:smps-batterycharger-attiny461.c **** @note
+  63:smps-batterycharger-attiny461.c **** Target:   ATTiny AVR with deadtime PWM and ADC functions
+  64:smps-batterycharger-attiny461.c **** @note
+  65:smps-batterycharger-attiny461.c **** Tested:   ATTiny461 at 8MHz.
+  66:smps-batterycharger-attiny461.c ****  */
+  67:smps-batterycharger-attiny461.c **** /***************************************************************************
+  68:smps-batterycharger-attiny461.c ****  *   Copyright (C) 2010 by Ken Sarkies                                     *
+  69:smps-batterycharger-attiny461.c ****  *   ksarkies@trinity.asn.au                                               *
+  70:smps-batterycharger-attiny461.c ****  *                                                                         *
+  71:smps-batterycharger-attiny461.c ****  *   This file is part of smps                                             *
+  72:smps-batterycharger-attiny461.c ****  *                                                                         *
+  73:smps-batterycharger-attiny461.c ****  *   smps is free software; you can redistribute it and/or modify          *
+  74:smps-batterycharger-attiny461.c ****  *   it under the terms of the GNU General Public License as published by  *
+  75:smps-batterycharger-attiny461.c ****  *   the Free Software Foundation; either version 2 of the License, or     *
+  76:smps-batterycharger-attiny461.c ****  *   (at your option) any later version.                                   *
+  77:smps-batterycharger-attiny461.c ****  *                                                                         *
+  78:smps-batterycharger-attiny461.c ****  *   smps is distributed in the hope that it will be useful,               *
+  79:smps-batterycharger-attiny461.c ****  *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
+  80:smps-batterycharger-attiny461.c ****  *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
+  81:smps-batterycharger-attiny461.c ****  *   GNU General Public License for more details.                          *
+  82:smps-batterycharger-attiny461.c ****  *                                                                         *
+  83:smps-batterycharger-attiny461.c ****  *   You should have received a copy of the GNU General Public License     *
+  84:smps-batterycharger-attiny461.c ****  *   along with smps if not, write to the                                  *
+  85:smps-batterycharger-attiny461.c ****  *   Free Software Foundation, Inc.,                                       *
+  86:smps-batterycharger-attiny461.c ****  *   51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA.             *
+  87:smps-batterycharger-attiny461.c ****  ***************************************************************************/
+  88:smps-batterycharger-attiny461.c **** 
+  89:smps-batterycharger-attiny461.c **** #define F_CPU 8000000
+  90:smps-batterycharger-attiny461.c **** 
+  91:smps-batterycharger-attiny461.c **** #include <avr/io.h>
+  92:smps-batterycharger-attiny461.c **** #include <avr/wdt.h>
+  93:smps-batterycharger-attiny461.c **** #include <util/delay.h>
+  94:smps-batterycharger-attiny461.c **** 
+  95:smps-batterycharger-attiny461.c **** #define TRUE 1
+  96:smps-batterycharger-attiny461.c **** #define FALSE 0
+  97:smps-batterycharger-attiny461.c **** /* Convenience macros (we don't use them all) */
+  98:smps-batterycharger-attiny461.c **** #define  _BV(bit) (1 << (bit))
+  99:smps-batterycharger-attiny461.c **** #define  inb(sfr) _SFR_BYTE(sfr)
+ 100:smps-batterycharger-attiny461.c **** #define  inw(sfr) _SFR_WORD(sfr)
+ 101:smps-batterycharger-attiny461.c **** #define  outb(sfr, val) (_SFR_BYTE(sfr) = (val))
+ 102:smps-batterycharger-attiny461.c **** #define  outw(sfr, val) (_SFR_WORD(sfr) = (val))
+ 103:smps-batterycharger-attiny461.c **** #define  cbi(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
+ 104:smps-batterycharger-attiny461.c **** #define  sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
+ 105:smps-batterycharger-attiny461.c **** #define  high(x) ((uint8_t) (x >> 8) & 0xFF)
+ 106:smps-batterycharger-attiny461.c **** #define  low(x) ((uint8_t) (x & 0xFF))
+ 107:smps-batterycharger-attiny461.c **** 
+ 108:smps-batterycharger-attiny461.c **** /* Set the TOP value to 128 (7 bits)
+ 109:smps-batterycharger-attiny461.c **** TOPSHIFT allows the A/D output to be scaled to match the PWM cycle period */
+ 110:smps-batterycharger-attiny461.c **** #define  TOPSHIFT 1
+ 111:smps-batterycharger-attiny461.c **** #define  TOP _BV(8-TOPSHIFT)
+ 112:smps-batterycharger-attiny461.c **** 
+ 113:smps-batterycharger-attiny461.c **** /* Define the float,and absorption phase voltages, the bulk current and the
+ 114:smps-batterycharger-attiny461.c **** float trigger current for a 7.5AH 12V Diamec SLA battery.
+ 115:smps-batterycharger-attiny461.c **** Currents are rescaled by 0.7 to match experimental observations. */
+ 116:smps-batterycharger-attiny461.c **** #define voltageScale 14.5
+ 117:smps-batterycharger-attiny461.c **** // Load current triggers to turn charger on and off
+ 118:smps-batterycharger-attiny461.c **** #define loadTrigHi      20
+ 119:smps-batterycharger-attiny461.c **** #define loadTrigLo      10
+ 120:smps-batterycharger-attiny461.c **** // Float and absorption phase voltage limits
+ 121:smps-batterycharger-attiny461.c **** #define floatVoltage   200
+ 122:smps-batterycharger-attiny461.c **** #define absVoltage     217
+ 123:smps-batterycharger-attiny461.c **** // Battery current trigger to go to float stage
+ 124:smps-batterycharger-attiny461.c **** #define floatTrigger    20
+ 125:smps-batterycharger-attiny461.c **** // Bulk phase current limit
+ 126:smps-batterycharger-attiny461.c **** #define bulkCurrent    157
+ 127:smps-batterycharger-attiny461.c **** // Current limit while boost upper MOSFET is off
+ 128:smps-batterycharger-attiny461.c **** #define slowCurrent     50
+ 129:smps-batterycharger-attiny461.c **** // Battery current trigger to turn on the boost upper MOSFET 
+ 130:smps-batterycharger-attiny461.c **** #define currentTrigger  20
+ 131:smps-batterycharger-attiny461.c **** // Deadtime correction when PWM mode is changed
+ 132:smps-batterycharger-attiny461.c **** #define deadtime        10
+ 133:smps-batterycharger-attiny461.c **** // Filter coefficient power of 2
+ 134:smps-batterycharger-attiny461.c **** #define k                8
+ 135:smps-batterycharger-attiny461.c **** 
+ 136:smps-batterycharger-attiny461.c **** /*****************************************************************************/
+ 137:smps-batterycharger-attiny461.c **** /* Global Variables */
+ 138:smps-batterycharger-attiny461.c **** 
+ 139:smps-batterycharger-attiny461.c **** /* State variables for sequencing operations */
+ 140:smps-batterycharger-attiny461.c ****     uint8_t stage = 0;          /* Charging stage - setup, charge, float */
+ 141:smps-batterycharger-attiny461.c ****     uint8_t triggered = FALSE;
+ 142:smps-batterycharger-attiny461.c **** 
+ 143:smps-batterycharger-attiny461.c **** /* Set desired voltage and current to an initial state */
+ 144:smps-batterycharger-attiny461.c ****     uint8_t voltage = absVoltage;
+ 145:smps-batterycharger-attiny461.c ****     uint8_t current = bulkCurrent;
+ 146:smps-batterycharger-attiny461.c ****     uint8_t boostmax = (TOP >> 1);  /* Limit to prevent excessive voltages */
+ 147:smps-batterycharger-attiny461.c ****     uint8_t buckmax = TOP;      /* Fully on */
+ 148:smps-batterycharger-attiny461.c **** 
+ 149:smps-batterycharger-attiny461.c **** /* Initialise the main control variables. Start with all power off */
+ 150:smps-batterycharger-attiny461.c ****     uint8_t buck = 0;
+ 151:smps-batterycharger-attiny461.c ****     uint8_t boost = 0;
+ 152:smps-batterycharger-attiny461.c ****     uint8_t boostModified = 0;
+ 153:smps-batterycharger-attiny461.c **** /* Measured voltages and output current */
+ 154:smps-batterycharger-attiny461.c ****     uint8_t vbattOriginal = 0;
+ 155:smps-batterycharger-attiny461.c ****     uint8_t vbatt = 0;
+ 156:smps-batterycharger-attiny461.c ****     uint8_t vin = 0;
+ 157:smps-batterycharger-attiny461.c ****     uint8_t iload = 0;
+ 158:smps-batterycharger-attiny461.c ****     uint8_t ibatt = 0;
+ 159:smps-batterycharger-attiny461.c ****     uint8_t absDiff = 0;
+ 160:smps-batterycharger-attiny461.c **** /* Filtered average estimators */
+ 161:smps-batterycharger-attiny461.c ****     uint16_t cvbattAvg = 0;
+ 162:smps-batterycharger-attiny461.c ****     uint16_t cvinAvg = 0;
+ 163:smps-batterycharger-attiny461.c ****     uint16_t ciloadAvg = 0;
+ 164:smps-batterycharger-attiny461.c ****     uint16_t cibattAvg = 0;
+ 165:smps-batterycharger-attiny461.c ****     uint8_t vbattAvg = 0;
+ 166:smps-batterycharger-attiny461.c ****     uint8_t vinAvg = 0;
+ 167:smps-batterycharger-attiny461.c ****     uint8_t iloadAvg = 0;
+ 168:smps-batterycharger-attiny461.c ****     uint8_t ibattAvg = 0;
+ 169:smps-batterycharger-attiny461.c **** 
+ 170:smps-batterycharger-attiny461.c **** /* Delay counters */
+ 171:smps-batterycharger-attiny461.c ****     uint16_t counter = 0;
+ 172:smps-batterycharger-attiny461.c ****     uint8_t secondCounter = 0;
+ 173:smps-batterycharger-attiny461.c **** 
+ 174:smps-batterycharger-attiny461.c **** /****************************************************************************/
+ 175:smps-batterycharger-attiny461.c **** /** @brief Main Program */
+ 176:smps-batterycharger-attiny461.c **** 
+ 177:smps-batterycharger-attiny461.c **** int main(void)
+ 178:smps-batterycharger-attiny461.c **** {
+  77               	.LM0:
+  78               	.LFBB1:
+  79 0000 CF93      		push r28
+  80 0002 DF93      		push r29
+  81 0004 00D0      		rcall .
+  82 0006 1F92      		push __zero_reg__
+  83 0008 CDB7      		in r28,__SP_L__
+  84 000a DEB7      		in r29,__SP_H__
+  85               	/* prologue: function */
+  86               	/* frame size = 3 */
+  87               	/* stack size = 5 */
+  88               	.L__stack_usage = 5
+ 179:smps-batterycharger-attiny461.c **** /* INITIALIZATION PHASE */
+ 180:smps-batterycharger-attiny461.c **** 
+ 181:smps-batterycharger-attiny461.c **** /* Stop watchdog timer while setting up */
+ 182:smps-batterycharger-attiny461.c ****     cbi(MCUSR,WDRF);
+  90               	.LM1:
+  91 000c 84B7      		in r24,0x34
+  92 000e 877F      		andi r24,lo8(-9)
+  93 0010 84BF      		out 0x34,r24
+ 183:smps-batterycharger-attiny461.c ****     wdt_disable();
+  95               	.LM2:
+  96 0012 88E1      		ldi r24,lo8(24)
+  97               	/* #APP */
+  98               	 ;  183 "smps-batterycharger-attiny461.c" 1
+  99 0014 0FB6      		in __tmp_reg__, __SREG__
+ 100 0016 F894      		cli
+ 101 0018 81BD      		out 33, r24
+ 102 001a 11BC      		out 33, __zero_reg__
+ 103 001c 0FBE      		out __SREG__,__tmp_reg__
+ 104               		
+ 105               	 ;  0 "" 2
+ 184:smps-batterycharger-attiny461.c **** /* Set ADC port pins PA4-7, PB6 (analogue inputs) as inputs */
+ 185:smps-batterycharger-attiny461.c ****     outb(DDRA,inb(DDRA) & 0x0F);
+ 107               	.LM3:
+ 108               	/* #NOAPP */
+ 109 001e 8AB3      		in r24,0x1a
+ 110 0020 8F70      		andi r24,lo8(15)
+ 111 0022 8ABB      		out 0x1a,r24
+ 186:smps-batterycharger-attiny461.c ****     outb(DDRB,(inb(DDRB) | 0x3C) & 0xBF); /* Outputs for four OC1 ports PB2-5 */
+ 113               	.LM4:
+ 114 0024 87B3      		in r24,0x17
+ 115 0026 8378      		andi r24,lo8(-125)
+ 116 0028 8C63      		ori r24,lo8(60)
+ 117 002a 87BB      		out 0x17,r24
+ 187:smps-batterycharger-attiny461.c ****     outb(PORTB,(inb(PORTB) & 0xC3)); /* Clear output registers on PWM ports */
+ 119               	.LM5:
+ 120 002c 88B3      		in r24,0x18
+ 121 002e 837C      		andi r24,lo8(-61)
+ 122 0030 88BB      		out 0x18,r24
+ 188:smps-batterycharger-attiny461.c **** /* Setup the PWM ports and output compares to default values */
+ 189:smps-batterycharger-attiny461.c ****     uint8_t buck = 0;
+ 190:smps-batterycharger-attiny461.c ****     uint8_t boost = 0;
+ 191:smps-batterycharger-attiny461.c ****     outb(TCCR1A,0x11);              /* OC1A not used, OC1B as PWM with both outputs */
+ 124               	.LM6:
+ 125 0032 81E1      		ldi r24,lo8(17)
+ 126 0034 80BF      		out 0x30,r24
+ 192:smps-batterycharger-attiny461.c ****     outb(TCCR1B,0x01);              /* Clock with no prescale, noninverted PWM */
+ 128               	.LM7:
+ 129 0036 81E0      		ldi r24,lo8(1)
+ 130 0038 8FBD      		out 0x2f,r24
+ 193:smps-batterycharger-attiny461.c ****     outb(TCCR1C,0x19);              /* OC1D as PWM with secondary output suppressed */
+ 132               	.LM8:
+ 133 003a 89E1      		ldi r24,lo8(25)
+ 134 003c 87BD      		out 0x27,r24
+ 194:smps-batterycharger-attiny461.c ****     outb(TCCR1D,0x00);              /* Fast PWM */
+ 136               	.LM9:
+ 137 003e 16BC      		out 0x26,__zero_reg__
+ 195:smps-batterycharger-attiny461.c ****     outb(TCCR1E,0x00);              /* Output Overrides */
+ 139               	.LM10:
+ 140 0040 10B8      		out 0,__zero_reg__
+ 196:smps-batterycharger-attiny461.c ****     outb(OCR1C,TOP);                /* Set TOP value */
+ 142               	.LM11:
+ 143 0042 80E8      		ldi r24,lo8(-128)
+ 144 0044 8BBD      		out 0x2b,r24
+ 197:smps-batterycharger-attiny461.c ****     outb(OCR1B,buck);
+ 146               	.LM12:
+ 147 0046 1CBC      		out 0x2c,__zero_reg__
+ 198:smps-batterycharger-attiny461.c ****     outb(OCR1D,boost);
+ 149               	.LM13:
+ 150 0048 1ABC      		out 0x2a,__zero_reg__
+ 199:smps-batterycharger-attiny461.c ****     outb(DT1,deadtime+(deadtime<<4));   /* Deadtime settings */
+ 152               	.LM14:
+ 153 004a 8AEA      		ldi r24,lo8(-86)
+ 154 004c 84BD      		out 0x24,r24
+ 200:smps-batterycharger-attiny461.c ****     outb(DIDR0,0xF8);               /* Disable digital input on AD3-6 and AREF */
+ 156               	.LM15:
+ 157 004e 88EF      		ldi r24,lo8(-8)
+ 158 0050 81B9      		out 0x1,r24
+ 201:smps-batterycharger-attiny461.c ****     outb(DIDR1,0x40);               /* Disable digital input on AD9 */
+ 160               	.LM16:
+ 161 0052 80E4      		ldi r24,lo8(64)
+ 162 0054 82B9      		out 0x2,r24
+ 202:smps-batterycharger-attiny461.c **** /* Power down Timer 0 and USI */
+ 203:smps-batterycharger-attiny461.c ****     outb(PRR,0x06);
+ 164               	.LM17:
+ 165 0056 86E0      		ldi r24,lo8(6)
+ 166 0058 86BF      		out 0x36,r24
+ 204:smps-batterycharger-attiny461.c **** /* Start the Watchdog Timer */
+ 205:smps-batterycharger-attiny461.c ****     wdt_enable(WDTO_15MS);
+ 168               	.LM18:
+ 169 005a 28E0      		ldi r18,lo8(8)
+ 170 005c 88E1      		ldi r24,lo8(24)
+ 171 005e 90E0      		ldi r25,0
+ 172               	/* #APP */
+ 173               	 ;  205 "smps-batterycharger-attiny461.c" 1
+ 174 0060 0FB6      		in __tmp_reg__,__SREG__
+ 175 0062 F894      		cli
+ 176 0064 A895      		wdr
+ 177 0066 81BD      		out 33,r24
+ 178 0068 0FBE      		out __SREG__,__tmp_reg__
+ 179 006a 21BD      		out 33,r18
+ 180               	 ;  0 "" 2
+ 206:smps-batterycharger-attiny461.c **** 
+ 207:smps-batterycharger-attiny461.c **** /* Start A/D to get the battery voltage before we start.
+ 208:smps-batterycharger-attiny461.c **** Wait for the analogue electronics to settle. */
+ 209:smps-batterycharger-attiny461.c ****     do
+ 210:smps-batterycharger-attiny461.c ****     {
+ 211:smps-batterycharger-attiny461.c ****         outb(ADMUX,0xE4);           /* MUX ADC4, Reference 2.56V, left adjust */
+ 182               	.LM19:
+ 183               	/* #NOAPP */
+ 184 006c 44EE      		ldi r20,lo8(-28)
+ 212:smps-batterycharger-attiny461.c ****         outb(ADCSRB,0x10);          /* Additional REFS2 bit */
+ 186               	.LM20:
+ 187 006e 30E1      		ldi r19,lo8(16)
+ 213:smps-batterycharger-attiny461.c ****         outb(ADCSRA,0xC3);          /* Start Conversion, clock divider 8 (1MHz) */
+ 189               	.LM21:
+ 190 0070 23EC      		ldi r18,lo8(-61)
+ 191               	.L5:
+ 211:smps-batterycharger-attiny461.c ****         outb(ADMUX,0xE4);           /* MUX ADC4, Reference 2.56V, left adjust */
+ 193               	.LM22:
+ 194 0072 47B9      		out 0x7,r20
+ 212:smps-batterycharger-attiny461.c ****         outb(ADCSRB,0x10);          /* Additional REFS2 bit */
+ 196               	.LM23:
+ 197 0074 33B9      		out 0x3,r19
+ 199               	.LM24:
+ 200 0076 26B9      		out 0x6,r18
+ 201               	.L2:
+ 214:smps-batterycharger-attiny461.c ****         while ((inb(ADCSRA) & _BV(ADSC)) > 0);  /* poll busy on ADC */
+ 203               	.LM25:
+ 204 0078 3699      		sbic 0x6,6
+ 205 007a 00C0      		rjmp .L2
+ 215:smps-batterycharger-attiny461.c ****         vbattOriginal = inb(ADCH);
+ 207               	.LM26:
+ 208 007c 85B1      		in r24,0x5
+ 209 007e 8093 0000 		sts vbattOriginal,r24
+ 216:smps-batterycharger-attiny461.c ****         if (vbattOriginal > vbatt) absDiff = vbattOriginal - vbatt;
+ 211               	.LM27:
+ 212 0082 9091 0000 		lds r25,vbatt
+ 213 0086 9817      		cp r25,r24
+ 214 0088 00F0      		brlo .+2
+ 215 008a 00C0      		rjmp .L3
+ 217               	.LM28:
+ 218 008c 582F      		mov r21,r24
+ 219 008e 591B      		sub r21,r25
+ 220 0090 952F      		mov r25,r21
+ 221 0092 5093 0000 		sts absDiff,r21
+ 222               	.L4:
+ 217:smps-batterycharger-attiny461.c ****         else absDiff = vbatt - vbattOriginal;
+ 218:smps-batterycharger-attiny461.c ****         vbatt = vbattOriginal;
+ 224               	.LM29:
+ 225 0096 8093 0000 		sts vbatt,r24
+ 219:smps-batterycharger-attiny461.c ****     }
+ 220:smps-batterycharger-attiny461.c ****     while (absDiff != 0);
+ 227               	.LM30:
+ 228 009a 9111      		cpse r25,__zero_reg__
+ 229 009c 00C0      		rjmp .L5
+ 230 009e E12C      		mov r14,__zero_reg__
+ 231 00a0 F12C      		mov r15,__zero_reg__
+ 232 00a2 8091 0000 		lds r24,counter
+ 233 00a6 9091 0000 		lds r25,counter+1
+ 234 00aa A091 0000 		lds r26,voltage
+ 235 00ae 5090 0000 		lds r5,buckmax
+ 236 00b2 2090 0000 		lds r2,boostmax
+ 237 00b6 E091 0000 		lds r30,cibattAvg
+ 238 00ba F091 0000 		lds r31,cibattAvg+1
+ 239 00be 6091 0000 		lds r22,cvbattAvg
+ 240 00c2 7091 0000 		lds r23,cvbattAvg+1
+ 241 00c6 4091 0000 		lds r20,ciloadAvg
+ 242 00ca 5091 0000 		lds r21,ciloadAvg+1
+ 243 00ce 2091 0000 		lds r18,cvinAvg
+ 244 00d2 3091 0000 		lds r19,cvinAvg+1
+ 245 00d6 9090 0000 		lds r9,triggered
+ 246 00da 4090 0000 		lds r4,vbattOriginal
+ 221:smps-batterycharger-attiny461.c **** 
+ 222:smps-batterycharger-attiny461.c **** /* MAIN LOOP */
+ 223:smps-batterycharger-attiny461.c **** 
+ 224:smps-batterycharger-attiny461.c ****     for(;;)
+ 225:smps-batterycharger-attiny461.c ****     {
+ 226:smps-batterycharger-attiny461.c ****         wdt_reset();                /* Reset the watchdog timer */
+ 227:smps-batterycharger-attiny461.c **** 
+ 228:smps-batterycharger-attiny461.c **** /* MEASUREMENT OF QUANTITIES */
+ 229:smps-batterycharger-attiny461.c **** /* Battery current is critical and is measured each cycle. The remaining 3 are
+ 230:smps-batterycharger-attiny461.c **** measured every fourth cycle, with computations done in the remaining slot.*/
+ 231:smps-batterycharger-attiny461.c **** 
+ 232:smps-batterycharger-attiny461.c **** /* Start A/D for first conversion (battery current feedback) every cycle */
+ 233:smps-batterycharger-attiny461.c ****         outb(ADMUX,0xE5);           /* MUX AD5, reference 2.56V, left adjust */
+ 248               	.LM31:
+ 249 00de B5EE      		ldi r27,lo8(-27)
+ 250 00e0 AB2E      		mov r10,r27
+ 234:smps-batterycharger-attiny461.c ****         outb(ADCSRB,0x10);          /* Higher gain plus REFS2 and mux bits*/
+ 252               	.LM32:
+ 253 00e2 10E1      		ldi r17,lo8(16)
+ 254 00e4 C12E      		mov r12,r17
+ 235:smps-batterycharger-attiny461.c ****         outb(ADCSRA,0xC3);          /* Start Conversion, clock divider 8 (1MHz) */
+ 256               	.LM33:
+ 257 00e6 03EC      		ldi r16,lo8(-61)
+ 258 00e8 D02E      		mov r13,r16
+ 236:smps-batterycharger-attiny461.c ****         while ((inb(ADCSRA) & _BV(ADSC)) > 0);  /* poll busy on ADC */
+ 237:smps-batterycharger-attiny461.c ****         ibatt = inb(ADCH);
+ 238:smps-batterycharger-attiny461.c **** /* Start A/D for second conversion (load current feedback) every 4 cycles */
+ 239:smps-batterycharger-attiny461.c ****         if ((counter & 0x03) == 0)
+ 240:smps-batterycharger-attiny461.c ****         {
+ 241:smps-batterycharger-attiny461.c ****             outb(ADMUX,0xE6);       /* MUX ADC6, reference 2.56V, left adjust */
+ 260               	.LM34:
+ 261 00ea B6EE      		ldi r27,lo8(-26)
+ 262 00ec 8B2E      		mov r8,r27
+ 242:smps-batterycharger-attiny461.c ****             outb(ADCSRB,0x10);      /* Additional REFS2 bit */
+ 243:smps-batterycharger-attiny461.c ****             outb(ADCSRA,0xC3);      /* Start Conversion, clock divider 8 (1MHz) */
+ 244:smps-batterycharger-attiny461.c ****             while ((inb(ADCSRA) & _BV(ADSC)) > 0);  /* poll busy on ADC */
+ 245:smps-batterycharger-attiny461.c ****             iload = inb(ADCH);
+ 246:smps-batterycharger-attiny461.c ****         }
+ 247:smps-batterycharger-attiny461.c **** /* Start A/D for third conversion (input voltage feedforward) every 4 cycles */
+ 248:smps-batterycharger-attiny461.c ****         if ((counter & 0x03) == 1)
+ 249:smps-batterycharger-attiny461.c ****         {
+ 250:smps-batterycharger-attiny461.c ****             outb(ADMUX,0xE3);       /* MUX ADC3, Reference 2.56V, left adjust */
+ 264               	.LM35:
+ 265 00ee 13EE      		ldi r17,lo8(-29)
+ 266 00f0 712E      		mov r7,r17
+ 251:smps-batterycharger-attiny461.c ****             outb(ADCSRB,0x10);      /* Additional REFS2 bit */
+ 252:smps-batterycharger-attiny461.c ****             outb(ADCSRA,0xC3);      /* Start Conversion, clock divider 8 (1MHz) */
+ 253:smps-batterycharger-attiny461.c ****             while ((inb(ADCSRA) & _BV(ADSC)) > 0);  /* poll busy on ADC */
+ 254:smps-batterycharger-attiny461.c ****             vin = inb(ADCH);
+ 255:smps-batterycharger-attiny461.c ****         }
+ 256:smps-batterycharger-attiny461.c **** /* Start A/D for fourth conversion (output voltage feedback) every 4 cycles */
+ 257:smps-batterycharger-attiny461.c ****         if ((counter & 0x03) == 2)
+ 258:smps-batterycharger-attiny461.c ****         {
+ 259:smps-batterycharger-attiny461.c ****             outb(ADMUX,0xE4);       /* MUX ADC4, Reference 2.56V, left adjust */
+ 268               	.LM36:
+ 269 00f2 04EE      		ldi r16,lo8(-28)
+ 270 00f4 602E      		mov r6,r16
+ 260:smps-batterycharger-attiny461.c ****             outb(ADCSRB,0x10);      /* Additional REFS2 bit */
+ 261:smps-batterycharger-attiny461.c ****             outb(ADCSRA,0xC3);      /* Start Conversion, clock divider 8 (1MHz) */
+ 262:smps-batterycharger-attiny461.c ****             while ((inb(ADCSRA) & _BV(ADSC)) > 0);  /* poll busy on ADC */
+ 263:smps-batterycharger-attiny461.c ****             vbatt = inb(ADCH);
+ 264:smps-batterycharger-attiny461.c ****         }
+ 265:smps-batterycharger-attiny461.c **** 
+ 266:smps-batterycharger-attiny461.c **** /* SMPS */
+ 267:smps-batterycharger-attiny461.c **** /* buck-boost control algorithm with voltage/current limits */
+ 268:smps-batterycharger-attiny461.c **** 
+ 269:smps-batterycharger-attiny461.c **** /* The SMPS algorithm increases buck to its maximum as long as the limit
+ 270:smps-batterycharger-attiny461.c **** trigger is not satisfied. Then it increases boost to its maximum. If the
+ 271:smps-batterycharger-attiny461.c **** condition is still not satisfied, it continues to increase boost, but
+ 272:smps-batterycharger-attiny461.c **** only very slowly. If the condition is satisfied, start reducing boost
+ 273:smps-batterycharger-attiny461.c **** till it hits a small value. After that reduce the buck.
+ 274:smps-batterycharger-attiny461.c **** However we won't reduce buck too far lest it turn off the current. */
+ 275:smps-batterycharger-attiny461.c ****         if ((vbatt < voltage) && (ibatt < current))
+ 276:smps-batterycharger-attiny461.c ****         {
+ 277:smps-batterycharger-attiny461.c ****             if (buck < buckmax) buck++;
+ 278:smps-batterycharger-attiny461.c ****             else if ((boost < boostmax) || ((counter & 0x1F) == 0)) boost++;
+ 279:smps-batterycharger-attiny461.c ****         }
+ 280:smps-batterycharger-attiny461.c ****         else
+ 281:smps-batterycharger-attiny461.c ****         {
+ 282:smps-batterycharger-attiny461.c ****             if (boost > 0) boost--;
+ 283:smps-batterycharger-attiny461.c ****             else if (buck > 0x10) buck--;
+ 284:smps-batterycharger-attiny461.c ****         }
+ 285:smps-batterycharger-attiny461.c **** 
+ 286:smps-batterycharger-attiny461.c **** /* CONTROL ALGORITHMS */
+ 287:smps-batterycharger-attiny461.c **** 
+ 288:smps-batterycharger-attiny461.c ****         if ((counter & 0x03) == 3)     /* Algorithms updated on the fourth cycle */
+ 289:smps-batterycharger-attiny461.c ****         {
+ 290:smps-batterycharger-attiny461.c **** 
+ 291:smps-batterycharger-attiny461.c **** /* SMOOTHING OF MEASURED QUANTITIES */
+ 292:smps-batterycharger-attiny461.c **** /* Smoothing is done with an exponentially weighted moving average filter. This
+ 293:smps-batterycharger-attiny461.c **** is an IIR filter which doesn't require memory of past samples.
+ 294:smps-batterycharger-attiny461.c **** The filter coefficient is a power of 8 to facilitate multiply and divide operations.
+ 295:smps-batterycharger-attiny461.c **** 
+ 296:smps-batterycharger-attiny461.c **** nth average estimator avn, nth sample xn, filter coefficient c = 2^k, all 8 bit.
+ 297:smps-batterycharger-attiny461.c **** The quantity cavn = c*avn is maintained at 16 bits to avoid roundoff errors.
+ 298:smps-batterycharger-attiny461.c **** 
+ 299:smps-batterycharger-attiny461.c **** cavn += (xn - cavn/c)
+ 300:smps-batterycharger-attiny461.c **** 
+ 301:smps-batterycharger-attiny461.c **** */
+ 302:smps-batterycharger-attiny461.c ****             ibattAvg = (cibattAvg >> k);
+ 303:smps-batterycharger-attiny461.c ****             cibattAvg += ibatt - ibattAvg;
+ 304:smps-batterycharger-attiny461.c ****             vbattAvg = (cvbattAvg >> k);
+ 305:smps-batterycharger-attiny461.c ****             cvbattAvg += vbatt - vbattAvg;
+ 306:smps-batterycharger-attiny461.c ****             iloadAvg = (ciloadAvg >> k);
+ 307:smps-batterycharger-attiny461.c ****             ciloadAvg += iload - iloadAvg;
+ 308:smps-batterycharger-attiny461.c ****             vinAvg = (cvinAvg >> k);
+ 309:smps-batterycharger-attiny461.c ****             cvinAvg += vin - vinAvg;
+ 310:smps-batterycharger-attiny461.c **** 
+ 311:smps-batterycharger-attiny461.c **** /* CHARGER ALGORITHM STARTUP PHASE */
+ 312:smps-batterycharger-attiny461.c **** /* If the output voltage exceeds the original measured battery voltage, and the
+ 313:smps-batterycharger-attiny461.c **** current starts to flow into the battery, switch on the boost upper MOSFET.
+ 314:smps-batterycharger-attiny461.c **** Otherwise set to isolate it. The current is limited in this case to protect
+ 315:smps-batterycharger-attiny461.c **** the Schottky diode until the MOSFET is switched on.
+ 316:smps-batterycharger-attiny461.c **** Don't do this if the load has triggered the charger off, otherwise it comes back on. */
+ 317:smps-batterycharger-attiny461.c ****             boostModified = boost;
+ 318:smps-batterycharger-attiny461.c ****             if (! triggered)
+ 319:smps-batterycharger-attiny461.c ****             {
+ 320:smps-batterycharger-attiny461.c ****                 if ((vbattAvg > vbattOriginal) && (ibattAvg > currentTrigger))
+ 321:smps-batterycharger-attiny461.c ****                 {
+ 322:smps-batterycharger-attiny461.c ****                     outb(TCCR1C,0x15);      /* OC1D as PWM with both outputs */
+ 323:smps-batterycharger-attiny461.c ****                     current = bulkCurrent;  /* Set back to full current limit */
+ 324:smps-batterycharger-attiny461.c ****                 }
+ 325:smps-batterycharger-attiny461.c ****                 else
+ 326:smps-batterycharger-attiny461.c ****                 {
+ 327:smps-batterycharger-attiny461.c ****                     outb(TCCR1C,0x19);      /* OC1D as PWM with secondary output suppressed */
+ 328:smps-batterycharger-attiny461.c ****                     current = slowCurrent;  /* limit the current until ready to go */
+ 329:smps-batterycharger-attiny461.c **** /* When boost upper MOSFET is suppressed, deadtime is not applied, so we must do it here. */
+ 330:smps-batterycharger-attiny461.c ****                     if (boostModified > deadtime) boostModified -= deadtime;
+ 331:smps-batterycharger-attiny461.c ****                     else boostModified = 0;
+ 332:smps-batterycharger-attiny461.c ****                 }
+ 333:smps-batterycharger-attiny461.c ****             }
+ 334:smps-batterycharger-attiny461.c **** 
+ 335:smps-batterycharger-attiny461.c **** /* CHARGER ALGORITHM */
+ 336:smps-batterycharger-attiny461.c **** /* If the battery current drops to less than 0.05C, enter the float stage. Drop the
+ 337:smps-batterycharger-attiny461.c **** voltage target to 2.3V per cell. Start checking after startup has settled. */
+ 338:smps-batterycharger-attiny461.c ****             if ((counter > 0xEFFF) && (ibattAvg <= floatTrigger))
+ 339:smps-batterycharger-attiny461.c ****             {
+ 340:smps-batterycharger-attiny461.c ****                 voltage = floatVoltage; /* drop to 2.3V per cell */
+ 341:smps-batterycharger-attiny461.c ****             }
+ 342:smps-batterycharger-attiny461.c **** 
+ 343:smps-batterycharger-attiny461.c **** /* LOAD CURRENT SWITCH */
+ 344:smps-batterycharger-attiny461.c **** /* If the load starts to draw current, turn off the charger. The battery will supply
+ 345:smps-batterycharger-attiny461.c **** the load. When the load current drops again, turn the charger back on to full charge.
+ 346:smps-batterycharger-attiny461.c **** This step is done to prevent the charger interfering with sensitive equipment. */
+ 347:smps-batterycharger-attiny461.c ****             if ((iloadAvg > loadTrigHi) && ((counter & 0x1F) == 0))
+ 348:smps-batterycharger-attiny461.c ****             {
+ 349:smps-batterycharger-attiny461.c ****                 if (! triggered)
+ 350:smps-batterycharger-attiny461.c ****                 {
+ 351:smps-batterycharger-attiny461.c ****                     outb(TCCR1A,0x01);  /* All PWMs are off */
+ 352:smps-batterycharger-attiny461.c ****                     outb(TCCR1C,0x01);
+ 353:smps-batterycharger-attiny461.c ****                     buck = 0;           /* Turn off charger altogether */
+ 354:smps-batterycharger-attiny461.c ****                     boost = 0;
+ 355:smps-batterycharger-attiny461.c ****                     boostModified = 0;
+ 356:smps-batterycharger-attiny461.c ****                     counter = 0;        /* Prevent excessive switching */
+ 357:smps-batterycharger-attiny461.c ****                     sbi(PORTB,6);       /* signal on spare port */
+ 358:smps-batterycharger-attiny461.c ****                 }
+ 359:smps-batterycharger-attiny461.c ****                 triggered = TRUE;
+ 360:smps-batterycharger-attiny461.c ****             }
+ 361:smps-batterycharger-attiny461.c ****             if ((iloadAvg < loadTrigLo) && ((counter & 0x1F) == 0))
+ 362:smps-batterycharger-attiny461.c ****             {
+ 363:smps-batterycharger-attiny461.c ****                 if (triggered)
+ 364:smps-batterycharger-attiny461.c ****                 {
+ 365:smps-batterycharger-attiny461.c ****                     outb(TCCR1A,0x11);  /* OC1A not used, OC1B as PWM with both outputs */
+ 366:smps-batterycharger-attiny461.c ****                     outb(TCCR1C,0x19);  /* OC1D as PWM with boost upper MOSFET suppressed */
+ 272               	.LM37:
+ 273 00f6 B9E1      		ldi r27,lo8(25)
+ 274 00f8 3B2E      		mov r3,r27
+ 323:smps-batterycharger-attiny461.c ****                     current = bulkCurrent;  /* Set back to full current limit */
+ 276               	.LM38:
+ 277 00fa FB82      		std Y+3,r15
+ 278 00fc 8B01      		movw r16,r22
+ 279 00fe 2A82      		std Y+2,r2
+ 280 0100 B42C      		mov r11,r4
+ 281 0102 4A2E      		mov r4,r26
+ 282 0104 F52C      		mov r15,r5
+ 283 0106 3982      		std Y+1,r3
+ 284 0108 1901      		movw r2,r18
+ 285               	.L27:
+ 226:smps-batterycharger-attiny461.c ****         wdt_reset();                /* Reset the watchdog timer */
+ 287               	.LM39:
+ 288               	/* #APP */
+ 289               	 ;  226 "smps-batterycharger-attiny461.c" 1
+ 290 010a A895      		wdr
+ 291               	 ;  0 "" 2
+ 233:smps-batterycharger-attiny461.c ****         outb(ADMUX,0xE5);           /* MUX AD5, reference 2.56V, left adjust */
+ 293               	.LM40:
+ 294               	/* #NOAPP */
+ 295 010c A7B8      		out 0x7,r10
+ 234:smps-batterycharger-attiny461.c ****         outb(ADCSRB,0x10);          /* Higher gain plus REFS2 and mux bits*/
+ 297               	.LM41:
+ 298 010e C3B8      		out 0x3,r12
+ 235:smps-batterycharger-attiny461.c ****         outb(ADCSRA,0xC3);          /* Start Conversion, clock divider 8 (1MHz) */
+ 300               	.LM42:
+ 301 0110 D6B8      		out 0x6,r13
+ 302 0112 AB81      		ldd r26,Y+3
+ 303 0114 B42D      		mov r27,r4
+ 304               	.L6:
+ 236:smps-batterycharger-attiny461.c ****         while ((inb(ADCSRA) & _BV(ADSC)) > 0);  /* poll busy on ADC */
+ 306               	.LM43:
+ 307 0116 3699      		sbic 0x6,6
+ 308 0118 00C0      		rjmp .L6
+ 309 011a AB83      		std Y+3,r26
+ 310 011c 4B2E      		mov r4,r27
+ 237:smps-batterycharger-attiny461.c ****         ibatt = inb(ADCH);
+ 312               	.LM44:
+ 313 011e 25B1      		in r18,0x5
+ 314 0120 2093 0000 		sts ibatt,r18
+ 239:smps-batterycharger-attiny461.c ****         if ((counter & 0x03) == 0)
+ 316               	.LM45:
+ 317 0124 BC01      		movw r22,r24
+ 318 0126 6370      		andi r22,3
+ 319 0128 7727      		clr r23
+ 320 012a 6115      		cp r22,__zero_reg__
+ 321 012c 7105      		cpc r23,__zero_reg__
+ 322 012e 01F4      		brne .L7
+ 241:smps-batterycharger-attiny461.c ****             outb(ADMUX,0xE6);       /* MUX ADC6, reference 2.56V, left adjust */
+ 324               	.LM46:
+ 325 0130 87B8      		out 0x7,r8
+ 242:smps-batterycharger-attiny461.c ****             outb(ADCSRB,0x10);      /* Additional REFS2 bit */
+ 327               	.LM47:
+ 328 0132 C3B8      		out 0x3,r12
+ 243:smps-batterycharger-attiny461.c ****             outb(ADCSRA,0xC3);      /* Start Conversion, clock divider 8 (1MHz) */
+ 330               	.LM48:
+ 331 0134 D6B8      		out 0x6,r13
+ 332 0136 AB81      		ldd r26,Y+3
+ 333               	.L8:
+ 244:smps-batterycharger-attiny461.c ****             while ((inb(ADCSRA) & _BV(ADSC)) > 0);  /* poll busy on ADC */
+ 335               	.LM49:
+ 336 0138 3699      		sbic 0x6,6
+ 337 013a 00C0      		rjmp .L8
+ 338 013c AB83      		std Y+3,r26
+ 339 013e 4B2E      		mov r4,r27
+ 245:smps-batterycharger-attiny461.c ****             iload = inb(ADCH);
+ 341               	.LM50:
+ 342 0140 25B1      		in r18,0x5
+ 343 0142 2093 0000 		sts iload,r18
+ 344 0146 BC01      		movw r22,r24
+ 345 0148 6370      		andi r22,3
+ 346 014a 7727      		clr r23
+ 347               	.L7:
+ 248:smps-batterycharger-attiny461.c ****         if ((counter & 0x03) == 1)
+ 349               	.LM51:
+ 350 014c 6130      		cpi r22,1
+ 351 014e 7105      		cpc r23,__zero_reg__
+ 352 0150 01F4      		brne .+2
+ 353 0152 00C0      		rjmp .L46
+ 354               	.L9:
+ 257:smps-batterycharger-attiny461.c ****         if ((counter & 0x03) == 2)
+ 356               	.LM52:
+ 357 0154 6230      		cpi r22,2
+ 358 0156 7105      		cpc r23,__zero_reg__
+ 359 0158 01F4      		brne .+2
+ 360 015a 00C0      		rjmp .L11
+ 361 015c 2091 0000 		lds r18,vbatt
+ 362               	.L12:
+ 275:smps-batterycharger-attiny461.c ****         if ((vbatt < voltage) && (ibatt < current))
+ 364               	.LM53:
+ 365 0160 2415      		cp r18,r4
+ 366 0162 00F4      		brsh .L14
+ 275:smps-batterycharger-attiny461.c ****         if ((vbatt < voltage) && (ibatt < current))
+ 368               	.LM54:
+ 369 0164 A091 0000 		lds r26,ibatt
+ 370 0168 3091 0000 		lds r19,current
+ 371 016c A317      		cp r26,r19
+ 372 016e 00F4      		brsh .L14
+ 277:smps-batterycharger-attiny461.c ****             if (buck < buckmax) buck++;
+ 374               	.LM55:
+ 375 0170 AB81      		ldd r26,Y+3
+ 376 0172 AF15      		cp r26,r15
+ 377 0174 00F0      		brlo .+2
+ 378 0176 00C0      		rjmp .L15
+ 277:smps-batterycharger-attiny461.c ****             if (buck < buckmax) buck++;
+ 380               	.LM56:
+ 381 0178 AF5F      		subi r26,lo8(-(1))
+ 382 017a AB83      		std Y+3,r26
+ 383               	.L16:
+ 288:smps-batterycharger-attiny461.c ****         if ((counter & 0x03) == 3)     /* Algorithms updated on the fourth cycle */
+ 385               	.LM57:
+ 386 017c 6330      		cpi r22,3
+ 387 017e 7105      		cpc r23,__zero_reg__
+ 388 0180 01F0      		breq .L47
+ 389               	.L19:
+ 367:smps-batterycharger-attiny461.c ****                     voltage = absVoltage;   /* Put charging back to absorption phase */
+ 368:smps-batterycharger-attiny461.c ****                     counter = 0;        /* Prevent excessive switching */
+ 369:smps-batterycharger-attiny461.c ****                     cbi(PORTB,6);       /* signal on spare port */
+ 370:smps-batterycharger-attiny461.c ****                 }
+ 371:smps-batterycharger-attiny461.c ****                 triggered = FALSE;
+ 372:smps-batterycharger-attiny461.c ****             }
+ 373:smps-batterycharger-attiny461.c ****         }
+ 374:smps-batterycharger-attiny461.c **** 
+ 375:smps-batterycharger-attiny461.c **** /**** Adjust the computed duty cycle */
+ 376:smps-batterycharger-attiny461.c ****         outb(OCR1B,buck);
+ 391               	.LM58:
+ 392 0182 AB81      		ldd r26,Y+3
+ 393 0184 ACBD      		out 0x2c,r26
+ 377:smps-batterycharger-attiny461.c ****         outb(OCR1D,boostModified);
+ 395               	.LM59:
+ 396 0186 2091 0000 		lds r18,boostModified
+ 397 018a 2ABD      		out 0x2a,r18
+ 378:smps-batterycharger-attiny461.c **** 
+ 379:smps-batterycharger-attiny461.c ****         counter++;
+ 399               	.LM60:
+ 400 018c 0196      		adiw r24,1
+ 401 018e 9093 0000 		sts counter+1,r25
+ 402 0192 8093 0000 		sts counter,r24
+ 380:smps-batterycharger-attiny461.c ****  
+ 381:smps-batterycharger-attiny461.c ****    }
+ 404               	.LM61:
+ 405 0196 00C0      		rjmp .L27
+ 406               	.L3:
+ 217:smps-batterycharger-attiny461.c ****         else absDiff = vbatt - vbattOriginal;
+ 408               	.LM62:
+ 409 0198 981B      		sub r25,r24
+ 410 019a 9093 0000 		sts absDiff,r25
+ 411 019e 00C0      		rjmp .L4
+ 412               	.L14:
+ 282:smps-batterycharger-attiny461.c ****             if (boost > 0) boost--;
+ 414               	.LM63:
+ 415 01a0 EE20      		tst r14
+ 416 01a2 01F4      		brne .+2
+ 417 01a4 00C0      		rjmp .L18
+ 282:smps-batterycharger-attiny461.c ****             if (boost > 0) boost--;
+ 419               	.LM64:
+ 420 01a6 EA94      		dec r14
+ 288:smps-batterycharger-attiny461.c ****         if ((counter & 0x03) == 3)     /* Algorithms updated on the fourth cycle */
+ 422               	.LM65:
+ 423 01a8 6330      		cpi r22,3
+ 424 01aa 7105      		cpc r23,__zero_reg__
+ 425 01ac 01F4      		brne .L19
+ 426               	.L47:
+ 302:smps-batterycharger-attiny461.c ****             ibattAvg = (cibattAvg >> k);
+ 428               	.LM66:
+ 429 01ae 4F2E      		mov r4,r31
+ 430 01b0 5524      		clr r5
+ 431 01b2 A42D      		mov r26,r4
+ 432 01b4 4092 0000 		sts ibattAvg,r4
+ 303:smps-batterycharger-attiny461.c ****             cibattAvg += ibatt - ibattAvg;
+ 434               	.LM67:
+ 435 01b8 6091 0000 		lds r22,ibatt
+ 436 01bc 70E0      		ldi r23,0
+ 437 01be 6419      		sub r22,r4
+ 438 01c0 7509      		sbc r23,r5
+ 439 01c2 E60F      		add r30,r22
+ 440 01c4 F71F      		adc r31,r23
+ 441 01c6 F093 0000 		sts cibattAvg+1,r31
+ 442 01ca E093 0000 		sts cibattAvg,r30
+ 304:smps-batterycharger-attiny461.c ****             vbattAvg = (cvbattAvg >> k);
+ 444               	.LM68:
+ 445 01ce 612F      		mov r22,r17
+ 446 01d0 7727      		clr r23
+ 447 01d2 B62F      		mov r27,r22
+ 448 01d4 6093 0000 		sts vbattAvg,r22
+ 305:smps-batterycharger-attiny461.c ****             cvbattAvg += vbatt - vbattAvg;
+ 450               	.LM69:
+ 451 01d8 30E0      		ldi r19,0
+ 452 01da 261B      		sub r18,r22
+ 453 01dc 370B      		sbc r19,r23
+ 454 01de 020F      		add r16,r18
+ 455 01e0 131F      		adc r17,r19
+ 456 01e2 1093 0000 		sts cvbattAvg+1,r17
+ 457 01e6 0093 0000 		sts cvbattAvg,r16
+ 306:smps-batterycharger-attiny461.c ****             iloadAvg = (ciloadAvg >> k);
+ 459               	.LM70:
+ 460 01ea 652F      		mov r22,r21
+ 461 01ec 7727      		clr r23
+ 462 01ee 562E      		mov r5,r22
+ 463 01f0 6093 0000 		sts iloadAvg,r22
+ 307:smps-batterycharger-attiny461.c ****             ciloadAvg += iload - iloadAvg;
+ 465               	.LM71:
+ 466 01f4 2091 0000 		lds r18,iload
+ 467 01f8 30E0      		ldi r19,0
+ 468 01fa 261B      		sub r18,r22
+ 469 01fc 370B      		sbc r19,r23
+ 470 01fe 420F      		add r20,r18
+ 471 0200 531F      		adc r21,r19
+ 472 0202 5093 0000 		sts ciloadAvg+1,r21
+ 473 0206 4093 0000 		sts ciloadAvg,r20
+ 308:smps-batterycharger-attiny461.c ****             vinAvg = (cvinAvg >> k);
+ 475               	.LM72:
+ 476 020a 632D      		mov r22,r3
+ 477 020c 7727      		clr r23
+ 478 020e 6093 0000 		sts vinAvg,r22
+ 309:smps-batterycharger-attiny461.c ****             cvinAvg += vin - vinAvg;
+ 480               	.LM73:
+ 481 0212 2091 0000 		lds r18,vin
+ 482 0216 30E0      		ldi r19,0
+ 483 0218 261B      		sub r18,r22
+ 484 021a 370B      		sbc r19,r23
+ 485 021c 220E      		add r2,r18
+ 486 021e 331E      		adc r3,r19
+ 487 0220 3092 0000 		sts cvinAvg+1,r3
+ 488 0224 2092 0000 		sts cvinAvg,r2
+ 317:smps-batterycharger-attiny461.c ****             boostModified = boost;
+ 490               	.LM74:
+ 491 0228 E092 0000 		sts boostModified,r14
+ 318:smps-batterycharger-attiny461.c ****             if (! triggered)
+ 493               	.LM75:
+ 494 022c 9110      		cpse r9,__zero_reg__
+ 495 022e 00C0      		rjmp .L20
+ 320:smps-batterycharger-attiny461.c ****                 if ((vbattAvg > vbattOriginal) && (ibattAvg > currentTrigger))
+ 497               	.LM76:
+ 498 0230 BB16      		cp r11,r27
+ 499 0232 00F0      		brlo .+2
+ 500 0234 00C0      		rjmp .L21
+ 320:smps-batterycharger-attiny461.c ****                 if ((vbattAvg > vbattOriginal) && (ibattAvg > currentTrigger))
+ 502               	.LM77:
+ 503 0236 A531      		cpi r26,lo8(21)
+ 504 0238 00F4      		brsh .+2
+ 505 023a 00C0      		rjmp .L21
+ 322:smps-batterycharger-attiny461.c ****                     outb(TCCR1C,0x15);      /* OC1D as PWM with both outputs */
+ 507               	.LM78:
+ 508 023c A5E1      		ldi r26,lo8(21)
+ 509 023e A7BD      		out 0x27,r26
+ 323:smps-batterycharger-attiny461.c ****                     current = bulkCurrent;  /* Set back to full current limit */
+ 511               	.LM79:
+ 512 0240 BDE9      		ldi r27,lo8(-99)
+ 513 0242 B093 0000 		sts current,r27
+ 514               	.L20:
+ 338:smps-batterycharger-attiny461.c ****             if ((counter > 0xEFFF) && (ibattAvg <= floatTrigger))
+ 516               	.LM80:
+ 517 0246 8115      		cp r24,__zero_reg__
+ 518 0248 A0EF      		ldi r26,-16
+ 519 024a 9A07      		cpc r25,r26
+ 520 024c 00F0      		brlo .L23
+ 338:smps-batterycharger-attiny461.c ****             if ((counter > 0xEFFF) && (ibattAvg <= floatTrigger))
+ 522               	.LM81:
+ 523 024e 2091 0000 		lds r18,ibattAvg
+ 524 0252 2531      		cpi r18,lo8(21)
+ 525 0254 00F4      		brsh .L23
+ 340:smps-batterycharger-attiny461.c ****                 voltage = floatVoltage; /* drop to 2.3V per cell */
+ 527               	.LM82:
+ 528 0256 B8EC      		ldi r27,lo8(-56)
+ 529 0258 B093 0000 		sts voltage,r27
+ 530               	.L23:
+ 347:smps-batterycharger-attiny461.c ****             if ((iloadAvg > loadTrigHi) && ((counter & 0x1F) == 0))
+ 532               	.LM83:
+ 533 025c 24E1      		ldi r18,lo8(20)
+ 534 025e 2515      		cp r18,r5
+ 535 0260 00F4      		brsh .L24
+ 347:smps-batterycharger-attiny461.c ****             if ((iloadAvg > loadTrigHi) && ((counter & 0x1F) == 0))
+ 537               	.LM84:
+ 538 0262 9C01      		movw r18,r24
+ 539 0264 2F71      		andi r18,31
+ 540 0266 3327      		clr r19
+ 541 0268 232B      		or r18,r19
+ 542 026a 01F0      		breq .+2
+ 543 026c 00C0      		rjmp .L44
+ 349:smps-batterycharger-attiny461.c ****                 if (! triggered)
+ 545               	.LM85:
+ 546 026e 9110      		cpse r9,__zero_reg__
+ 547 0270 00C0      		rjmp .L25
+ 351:smps-batterycharger-attiny461.c ****                     outb(TCCR1A,0x01);  /* All PWMs are off */
+ 549               	.LM86:
+ 550 0272 31E0      		ldi r19,lo8(1)
+ 551 0274 30BF      		out 0x30,r19
+ 352:smps-batterycharger-attiny461.c ****                     outb(TCCR1C,0x01);
+ 553               	.LM87:
+ 554 0276 37BD      		out 0x27,r19
+ 355:smps-batterycharger-attiny461.c ****                     boostModified = 0;
+ 556               	.LM88:
+ 557 0278 1092 0000 		sts boostModified,__zero_reg__
+ 356:smps-batterycharger-attiny461.c ****                     counter = 0;        /* Prevent excessive switching */
+ 559               	.LM89:
+ 560 027c 1092 0000 		sts counter+1,__zero_reg__
+ 561 0280 1092 0000 		sts counter,__zero_reg__
+ 357:smps-batterycharger-attiny461.c ****                     sbi(PORTB,6);       /* signal on spare port */
+ 563               	.LM90:
+ 564 0284 C69A      		sbi 0x18,6
+ 565 0286 5090 0000 		lds r5,iloadAvg
+ 354:smps-batterycharger-attiny461.c ****                     boost = 0;
+ 567               	.LM91:
+ 568 028a E12C      		mov r14,__zero_reg__
+ 353:smps-batterycharger-attiny461.c ****                     buck = 0;           /* Turn off charger altogether */
+ 570               	.LM92:
+ 571 028c 1B82      		std Y+3,__zero_reg__
+ 572 028e 80E0      		ldi r24,0
+ 573 0290 90E0      		ldi r25,0
+ 574               	.L25:
+ 359:smps-batterycharger-attiny461.c ****                 triggered = TRUE;
+ 576               	.LM93:
+ 577 0292 A1E0      		ldi r26,lo8(1)
+ 578 0294 A093 0000 		sts triggered,r26
+ 579 0298 9924      		clr r9
+ 580 029a 9394      		inc r9
+ 581               	.L24:
+ 361:smps-batterycharger-attiny461.c ****             if ((iloadAvg < loadTrigLo) && ((counter & 0x1F) == 0))
+ 583               	.LM94:
+ 584 029c B9E0      		ldi r27,lo8(9)
+ 585 029e B515      		cp r27,r5
+ 586 02a0 00F4      		brsh .+2
+ 587 02a2 00C0      		rjmp .L44
+ 361:smps-batterycharger-attiny461.c ****             if ((iloadAvg < loadTrigLo) && ((counter & 0x1F) == 0))
+ 589               	.LM95:
+ 590 02a4 9C01      		movw r18,r24
+ 591 02a6 2F71      		andi r18,31
+ 592 02a8 3327      		clr r19
+ 593 02aa 232B      		or r18,r19
+ 594 02ac 01F4      		brne .L44
+ 363:smps-batterycharger-attiny461.c ****                 if (triggered)
+ 596               	.LM96:
+ 597 02ae 9920      		tst r9
+ 598 02b0 01F0      		breq .L26
+ 365:smps-batterycharger-attiny461.c ****                     outb(TCCR1A,0x11);  /* OC1A not used, OC1B as PWM with both outputs */
+ 600               	.LM97:
+ 601 02b2 21E1      		ldi r18,lo8(17)
+ 602 02b4 20BF      		out 0x30,r18
+ 366:smps-batterycharger-attiny461.c ****                     outb(TCCR1C,0x19);  /* OC1D as PWM with boost upper MOSFET suppressed */
+ 604               	.LM98:
+ 605 02b6 3981      		ldd r19,Y+1
+ 606 02b8 37BD      		out 0x27,r19
+ 367:smps-batterycharger-attiny461.c ****                     voltage = absVoltage;   /* Put charging back to absorption phase */
+ 608               	.LM99:
+ 609 02ba 89ED      		ldi r24,lo8(-39)
+ 610 02bc 8093 0000 		sts voltage,r24
+ 368:smps-batterycharger-attiny461.c ****                     counter = 0;        /* Prevent excessive switching */
+ 612               	.LM100:
+ 613 02c0 1092 0000 		sts counter+1,__zero_reg__
+ 614 02c4 1092 0000 		sts counter,__zero_reg__
+ 369:smps-batterycharger-attiny461.c ****                     cbi(PORTB,6);       /* signal on spare port */
+ 616               	.LM101:
+ 617 02c8 C698      		cbi 0x18,6
+ 618 02ca 80E0      		ldi r24,0
+ 619 02cc 90E0      		ldi r25,0
+ 620               	.L26:
+ 371:smps-batterycharger-attiny461.c ****                 triggered = FALSE;
+ 622               	.LM102:
+ 623 02ce 1092 0000 		sts triggered,__zero_reg__
+ 624 02d2 4090 0000 		lds r4,voltage
+ 625 02d6 912C      		mov r9,__zero_reg__
+ 626 02d8 00C0      		rjmp .L19
+ 627               	.L18:
+ 283:smps-batterycharger-attiny461.c ****             else if (buck > 0x10) buck--;
+ 629               	.LM103:
+ 630 02da 3B81      		ldd r19,Y+3
+ 631 02dc 3131      		cpi r19,lo8(17)
+ 632 02de 00F4      		brsh .+2
+ 633 02e0 00C0      		rjmp .L16
+ 283:smps-batterycharger-attiny461.c ****             else if (buck > 0x10) buck--;
+ 635               	.LM104:
+ 636 02e2 3150      		subi r19,lo8(-(-1))
+ 637 02e4 3B83      		std Y+3,r19
+ 638 02e6 00C0      		rjmp .L16
+ 639               	.L11:
+ 259:smps-batterycharger-attiny461.c ****             outb(ADMUX,0xE4);       /* MUX ADC4, Reference 2.56V, left adjust */
+ 641               	.LM105:
+ 642 02e8 67B8      		out 0x7,r6
+ 260:smps-batterycharger-attiny461.c ****             outb(ADCSRB,0x10);      /* Additional REFS2 bit */
+ 644               	.LM106:
+ 645 02ea C3B8      		out 0x3,r12
+ 261:smps-batterycharger-attiny461.c ****             outb(ADCSRA,0xC3);      /* Start Conversion, clock divider 8 (1MHz) */
+ 647               	.LM107:
+ 648 02ec D6B8      		out 0x6,r13
+ 649 02ee AB81      		ldd r26,Y+3
+ 650 02f0 B42D      		mov r27,r4
+ 651               	.L13:
+ 262:smps-batterycharger-attiny461.c ****             while ((inb(ADCSRA) & _BV(ADSC)) > 0);  /* poll busy on ADC */
+ 653               	.LM108:
+ 654 02f2 3699      		sbic 0x6,6
+ 655 02f4 00C0      		rjmp .L13
+ 656 02f6 AB83      		std Y+3,r26
+ 657 02f8 4B2E      		mov r4,r27
+ 263:smps-batterycharger-attiny461.c ****             vbatt = inb(ADCH);
+ 659               	.LM109:
+ 660 02fa 25B1      		in r18,0x5
+ 661 02fc 2093 0000 		sts vbatt,r18
+ 662 0300 BC01      		movw r22,r24
+ 663 0302 6370      		andi r22,3
+ 664 0304 7727      		clr r23
+ 665 0306 00C0      		rjmp .L12
+ 666               	.L46:
+ 250:smps-batterycharger-attiny461.c ****             outb(ADMUX,0xE3);       /* MUX ADC3, Reference 2.56V, left adjust */
+ 668               	.LM110:
+ 669 0308 77B8      		out 0x7,r7
+ 251:smps-batterycharger-attiny461.c ****             outb(ADCSRB,0x10);      /* Additional REFS2 bit */
+ 671               	.LM111:
+ 672 030a C3B8      		out 0x3,r12
+ 252:smps-batterycharger-attiny461.c ****             outb(ADCSRA,0xC3);      /* Start Conversion, clock divider 8 (1MHz) */
+ 674               	.LM112:
+ 675 030c D6B8      		out 0x6,r13
+ 676 030e AB81      		ldd r26,Y+3
+ 677 0310 B42D      		mov r27,r4
+ 678               	.L10:
+ 253:smps-batterycharger-attiny461.c ****             while ((inb(ADCSRA) & _BV(ADSC)) > 0);  /* poll busy on ADC */
+ 680               	.LM113:
+ 681 0312 3699      		sbic 0x6,6
+ 682 0314 00C0      		rjmp .L10
+ 683 0316 AB83      		std Y+3,r26
+ 684 0318 4B2E      		mov r4,r27
+ 254:smps-batterycharger-attiny461.c ****             vin = inb(ADCH);
+ 686               	.LM114:
+ 687 031a 25B1      		in r18,0x5
+ 688 031c 2093 0000 		sts vin,r18
+ 689 0320 BC01      		movw r22,r24
+ 690 0322 6370      		andi r22,3
+ 691 0324 7727      		clr r23
+ 692 0326 00C0      		rjmp .L9
+ 693               	.L44:
+ 694 0328 4090 0000 		lds r4,voltage
+ 695 032c 00C0      		rjmp .L19
+ 696               	.L15:
+ 278:smps-batterycharger-attiny461.c ****             else if ((boost < boostmax) || ((counter & 0x1F) == 0)) boost++;
+ 698               	.LM115:
+ 699 032e BA81      		ldd r27,Y+2
+ 700 0330 EB16      		cp r14,r27
+ 701 0332 00F0      		brlo .L17
+ 278:smps-batterycharger-attiny461.c ****             else if ((boost < boostmax) || ((counter & 0x1F) == 0)) boost++;
+ 703               	.LM116:
+ 704 0334 DC01      		movw r26,r24
+ 705 0336 AF71      		andi r26,31
+ 706 0338 BB27      		clr r27
+ 707 033a AB2B      		or r26,r27
+ 708 033c 01F0      		breq .+2
+ 709 033e 00C0      		rjmp .L16
+ 710               	.L17:
+ 278:smps-batterycharger-attiny461.c ****             else if ((boost < boostmax) || ((counter & 0x1F) == 0)) boost++;
+ 712               	.LM117:
+ 713 0340 E394      		inc r14
+ 714 0342 00C0      		rjmp .L16
+ 715               	.L21:
+ 327:smps-batterycharger-attiny461.c ****                     outb(TCCR1C,0x19);      /* OC1D as PWM with secondary output suppressed */
+ 717               	.LM118:
+ 718 0344 2981      		ldd r18,Y+1
+ 719 0346 27BD      		out 0x27,r18
+ 328:smps-batterycharger-attiny461.c ****                     current = slowCurrent;  /* limit the current until ready to go */
+ 721               	.LM119:
+ 722 0348 32E3      		ldi r19,lo8(50)
+ 723 034a 3093 0000 		sts current,r19
+ 330:smps-batterycharger-attiny461.c ****                     if (boostModified > deadtime) boostModified -= deadtime;
+ 725               	.LM120:
+ 726 034e 2091 0000 		lds r18,boostModified
+ 727 0352 2B30      		cpi r18,lo8(11)
+ 728 0354 00F0      		brlo .L22
+ 330:smps-batterycharger-attiny461.c ****                     if (boostModified > deadtime) boostModified -= deadtime;
+ 730               	.LM121:
+ 731 0356 2A50      		subi r18,lo8(-(-10))
+ 732 0358 2093 0000 		sts boostModified,r18
+ 733 035c 5090 0000 		lds r5,iloadAvg
+ 734 0360 00C0      		rjmp .L20
+ 735               	.L22:
+ 331:smps-batterycharger-attiny461.c ****                     else boostModified = 0;
+ 737               	.LM122:
+ 738 0362 1092 0000 		sts boostModified,__zero_reg__
+ 739 0366 5090 0000 		lds r5,iloadAvg
+ 740 036a 00C0      		rjmp .L20
+ 746               	.Lscope1:
+ 748               		.stabd	78,0,0
+ 749               	.global	secondCounter
+ 750               		.section .bss
+ 753               	secondCounter:
+ 754 0000 00        		.zero	1
+ 755               	.global	counter
+ 758               	counter:
+ 759 0001 0000      		.zero	2
+ 760               	.global	ibattAvg
+ 763               	ibattAvg:
+ 764 0003 00        		.zero	1
+ 765               	.global	iloadAvg
+ 768               	iloadAvg:
+ 769 0004 00        		.zero	1
+ 770               	.global	vinAvg
+ 773               	vinAvg:
+ 774 0005 00        		.zero	1
+ 775               	.global	vbattAvg
+ 778               	vbattAvg:
+ 779 0006 00        		.zero	1
+ 780               	.global	cibattAvg
+ 783               	cibattAvg:
+ 784 0007 0000      		.zero	2
+ 785               	.global	ciloadAvg
+ 788               	ciloadAvg:
+ 789 0009 0000      		.zero	2
+ 790               	.global	cvinAvg
+ 793               	cvinAvg:
+ 794 000b 0000      		.zero	2
+ 795               	.global	cvbattAvg
+ 798               	cvbattAvg:
+ 799 000d 0000      		.zero	2
+ 800               	.global	absDiff
+ 803               	absDiff:
+ 804 000f 00        		.zero	1
+ 805               	.global	ibatt
+ 808               	ibatt:
+ 809 0010 00        		.zero	1
+ 810               	.global	iload
+ 813               	iload:
+ 814 0011 00        		.zero	1
+ 815               	.global	vin
+ 818               	vin:
+ 819 0012 00        		.zero	1
+ 820               	.global	vbatt
+ 823               	vbatt:
+ 824 0013 00        		.zero	1
+ 825               	.global	vbattOriginal
+ 828               	vbattOriginal:
+ 829 0014 00        		.zero	1
+ 830               	.global	boostModified
+ 833               	boostModified:
+ 834 0015 00        		.zero	1
+ 835               	.global	boost
+ 838               	boost:
+ 839 0016 00        		.zero	1
+ 840               	.global	buck
+ 843               	buck:
+ 844 0017 00        		.zero	1
+ 845               	.global	buckmax
+ 846               		.data
+ 849               	buckmax:
+ 850 0000 80        		.byte	-128
+ 851               	.global	boostmax
+ 854               	boostmax:
+ 855 0001 40        		.byte	64
+ 856               	.global	current
+ 859               	current:
+ 860 0002 9D        		.byte	-99
+ 861               	.global	voltage
+ 864               	voltage:
+ 865 0003 D9        		.byte	-39
+ 866               	.global	triggered
+ 867               		.section .bss
+ 870               	triggered:
+ 871 0018 00        		.zero	1
+ 872               	.global	stage
+ 875               	stage:
+ 876 0019 00        		.zero	1
+ 902               		.text
+ 904               	.Letext0:
+ 905               		.ident	"GCC: (GNU) 4.7.2"
+ 906               	.global __do_copy_data
+ 907               	.global __do_clear_bss
+DEFINED SYMBOLS
+                            *ABS*:0000000000000000 smps-batterycharger-attiny461.c
+     /tmp/cc2ieOxf.s:2      *ABS*:000000000000003e __SP_H__
+     /tmp/cc2ieOxf.s:3      *ABS*:000000000000003d __SP_L__
+     /tmp/cc2ieOxf.s:4      *ABS*:000000000000003f __SREG__
+     /tmp/cc2ieOxf.s:5      *ABS*:0000000000000000 __tmp_reg__
+     /tmp/cc2ieOxf.s:6      *ABS*:0000000000000001 __zero_reg__
+     /tmp/cc2ieOxf.s:74     .text.startup:0000000000000000 main
+     /tmp/cc2ieOxf.s:828    .bss:0000000000000014 vbattOriginal
+     /tmp/cc2ieOxf.s:823    .bss:0000000000000013 vbatt
+     /tmp/cc2ieOxf.s:803    .bss:000000000000000f absDiff
+     /tmp/cc2ieOxf.s:758    .bss:0000000000000001 counter
+     /tmp/cc2ieOxf.s:864    .data:0000000000000003 voltage
+     /tmp/cc2ieOxf.s:849    .data:0000000000000000 buckmax
+     /tmp/cc2ieOxf.s:854    .data:0000000000000001 boostmax
+     /tmp/cc2ieOxf.s:783    .bss:0000000000000007 cibattAvg
+     /tmp/cc2ieOxf.s:798    .bss:000000000000000d cvbattAvg
+     /tmp/cc2ieOxf.s:788    .bss:0000000000000009 ciloadAvg
+     /tmp/cc2ieOxf.s:793    .bss:000000000000000b cvinAvg
+     /tmp/cc2ieOxf.s:870    .bss:0000000000000018 triggered
+     /tmp/cc2ieOxf.s:808    .bss:0000000000000010 ibatt
+     /tmp/cc2ieOxf.s:813    .bss:0000000000000011 iload
+     /tmp/cc2ieOxf.s:859    .data:0000000000000002 current
+     /tmp/cc2ieOxf.s:833    .bss:0000000000000015 boostModified
+     /tmp/cc2ieOxf.s:763    .bss:0000000000000003 ibattAvg
+     /tmp/cc2ieOxf.s:778    .bss:0000000000000006 vbattAvg
+     /tmp/cc2ieOxf.s:768    .bss:0000000000000004 iloadAvg
+     /tmp/cc2ieOxf.s:773    .bss:0000000000000005 vinAvg
+     /tmp/cc2ieOxf.s:818    .bss:0000000000000012 vin
+     /tmp/cc2ieOxf.s:753    .bss:0000000000000000 secondCounter
+     /tmp/cc2ieOxf.s:838    .bss:0000000000000016 boost
+     /tmp/cc2ieOxf.s:843    .bss:0000000000000017 buck
+     /tmp/cc2ieOxf.s:875    .bss:0000000000000019 stage
+
+UNDEFINED SYMBOLS
+__do_copy_data
+__do_clear_bss

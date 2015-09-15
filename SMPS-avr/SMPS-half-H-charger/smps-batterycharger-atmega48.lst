@@ -1,0 +1,1065 @@
+   1               		.file	"smps-batterycharger-atmega48.c"
+   2               	__SREG__ = 0x3f
+   3               	__SP_H__ = 0x3e
+   4               	__SP_L__ = 0x3d
+   5               	__CCP__ = 0x34
+   6               	__tmp_reg__ = 0
+   7               	__zero_reg__ = 1
+  10               		.text
+  11               	.Ltext0:
+  72               	.global	main
+  74               	main:
+  75               		.stabd	46,0,0
+   1:smps-batterycharger-atmega48.c **** /**
+   2:smps-batterycharger-atmega48.c **** @mainpage SMPS Fast SLA Battery Charger Project on ATMega48
+   3:smps-batterycharger-atmega48.c **** @version 1.0.0
+   4:smps-batterycharger-atmega48.c **** @author Ken Sarkies (www.jiggerjuice.net)
+   5:smps-batterycharger-atmega48.c **** @date 29 June 2010
+   6:smps-batterycharger-atmega48.c **** @brief Code for an SMPS half H-bridge buck-boost Battery Charger on ATMega48
+   7:smps-batterycharger-atmega48.c **** 
+   8:smps-batterycharger-atmega48.c **** This is an implementation of an SMPS half H-bridge buck-boost regulator in
+   9:smps-batterycharger-atmega48.c **** which the ATMega48 16 bit timer is used in phase correct PWM mode with two
+  10:smps-batterycharger-atmega48.c **** compare outputs to generate the two MOSFET enable signals. The voltage and
+  11:smps-batterycharger-atmega48.c **** current feedback is converted internally and used to vary the duty cycle of
+  12:smps-batterycharger-atmega48.c **** the enable signals. This is not a synchronous circuit so the two signals do
+  13:smps-batterycharger-atmega48.c **** not need to be synchronized.
+  14:smps-batterycharger-atmega48.c **** 
+  15:smps-batterycharger-atmega48.c **** A range of protection functions is implemented, including current overload,
+  16:smps-batterycharger-atmega48.c **** short-circuit detection, brown-out and watchdog timer resets.
+  17:smps-batterycharger-atmega48.c **** 
+  18:smps-batterycharger-atmega48.c **** The A/D converter is operated at its maximum rate of 1MHz which means that
+  19:smps-batterycharger-atmega48.c **** the resolution is limited to only 8 bits. Conversion time is 13 microseconds.
+  20:smps-batterycharger-atmega48.c **** The reference voltage used is the internal analogue 5V supply.
+  21:smps-batterycharger-atmega48.c **** 
+  22:smps-batterycharger-atmega48.c **** The feedback circuits attenuate the input and output voltages by 0.267, and
+  23:smps-batterycharger-atmega48.c **** provide 1V per ampere output current. For the sealed lead-acid battery it
+  24:smps-batterycharger-atmega48.c **** limits current ot 0.4C and the voltage to 2.5V per cell until the current
+  25:smps-batterycharger-atmega48.c **** drops to 0.05C at which time it switches to 2.3V per cell. This low trigger
+  26:smps-batterycharger-atmega48.c **** point is about the lowest possible for the A/D converter resolution, being
+  27:smps-batterycharger-atmega48.c **** 6 bits for a 6AH cell.
+  28:smps-batterycharger-atmega48.c **** 
+  29:smps-batterycharger-atmega48.c **** The program uses the following ATMega48 ports for the user interface part:
+  30:smps-batterycharger-atmega48.c **** 
+  31:smps-batterycharger-atmega48.c **** PIND0,1 is a battery capacity selection switch (4 values TBD)
+  32:smps-batterycharger-atmega48.c **** PIND3 is the charge start/restart switch
+  33:smps-batterycharger-atmega48.c **** 
+  34:smps-batterycharger-atmega48.c **** LEDs
+  35:smps-batterycharger-atmega48.c **** PD4 tells if in stage 0 or 1
+  36:smps-batterycharger-atmega48.c **** PB6 tells if 6V battery
+  37:smps-batterycharger-atmega48.c **** PB7 tells if 12V battery
+  38:smps-batterycharger-atmega48.c **** PD5 tells if current limit exceeded (bulk charge phase).
+  39:smps-batterycharger-atmega48.c **** PD6 tells if voltage limit exceeded (absorption charge phase).
+  40:smps-batterycharger-atmega48.c **** PD7 tells if the charging has finished (float charge stage).
+  41:smps-batterycharger-atmega48.c **** 
+  42:smps-batterycharger-atmega48.c **** PD2 is a control output for the reversed battery blocking MOSFET.
+  43:smps-batterycharger-atmega48.c **** 
+  44:smps-batterycharger-atmega48.c **** @note
+  45:smps-batterycharger-atmega48.c **** Software: AVR-GCC 3.4.5
+  46:smps-batterycharger-atmega48.c **** @note
+  47:smps-batterycharger-atmega48.c **** Target:   ATMega AVR with PWM and ADC functions
+  48:smps-batterycharger-atmega48.c **** @note
+  49:smps-batterycharger-atmega48.c **** Tested:   ATMega48 at 8MHz.
+  50:smps-batterycharger-atmega48.c ****  */
+  51:smps-batterycharger-atmega48.c **** /***************************************************************************
+  52:smps-batterycharger-atmega48.c ****  *   Copyright (C) 2010 by Ken Sarkies                                     *
+  53:smps-batterycharger-atmega48.c ****  *   ksarkies@trinity.asn.au                                               *
+  54:smps-batterycharger-atmega48.c ****  *                                                                         *
+  55:smps-batterycharger-atmega48.c ****  *   This file is part of smps-batterycharger-atmega48                     *
+  56:smps-batterycharger-atmega48.c ****  *                                                                         *
+  57:smps-batterycharger-atmega48.c ****  *   This is free software; you can redistribute it and/or modify          *
+  58:smps-batterycharger-atmega48.c ****  *   it under the terms of the GNU General Public License as published by  *
+  59:smps-batterycharger-atmega48.c ****  *   the Free Software Foundation; either version 2 of the License, or     *
+  60:smps-batterycharger-atmega48.c ****  *   (at your option) any later version.                                   *
+  61:smps-batterycharger-atmega48.c ****  *                                                                         *
+  62:smps-batterycharger-atmega48.c ****  *   This software is distributed in the hope that it will be useful,      *
+  63:smps-batterycharger-atmega48.c ****  *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
+  64:smps-batterycharger-atmega48.c ****  *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
+  65:smps-batterycharger-atmega48.c ****  *   GNU General Public License for more details.                          *
+  66:smps-batterycharger-atmega48.c ****  *                                                                         *
+  67:smps-batterycharger-atmega48.c ****  *   You should have received a copy of the GNU General Public License     *
+  68:smps-batterycharger-atmega48.c ****  *   along with the software. If not, write to the:                        *
+  69:smps-batterycharger-atmega48.c ****  *   Free Software Foundation, Inc.,                                       *
+  70:smps-batterycharger-atmega48.c ****  *   51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA.             *
+  71:smps-batterycharger-atmega48.c ****  ***************************************************************************/
+  72:smps-batterycharger-atmega48.c **** 
+  73:smps-batterycharger-atmega48.c **** #include <avr/io.h>
+  74:smps-batterycharger-atmega48.c **** #include <avr/wdt.h>
+  75:smps-batterycharger-atmega48.c **** 
+  76:smps-batterycharger-atmega48.c **** #define TRUE 1
+  77:smps-batterycharger-atmega48.c **** #define FALSE 0
+  78:smps-batterycharger-atmega48.c **** /* Convenience macros (we don't use them all) */
+  79:smps-batterycharger-atmega48.c **** #define  _BV(bit) (1 << (bit))
+  80:smps-batterycharger-atmega48.c **** #define  inb(sfr) _SFR_BYTE(sfr)
+  81:smps-batterycharger-atmega48.c **** #define  inw(sfr) _SFR_WORD(sfr)
+  82:smps-batterycharger-atmega48.c **** #define  outb(sfr, val) (_SFR_BYTE(sfr) = (val))
+  83:smps-batterycharger-atmega48.c **** #define  outw(sfr, val) (_SFR_WORD(sfr) = (val))
+  84:smps-batterycharger-atmega48.c **** #define  cbi(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
+  85:smps-batterycharger-atmega48.c **** #define  sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
+  86:smps-batterycharger-atmega48.c **** #define  high(x) ((uint8_t) (x >> 8) & 0xFF)
+  87:smps-batterycharger-atmega48.c **** #define  low(x) ((uint8_t) (x & 0xFF))
+  88:smps-batterycharger-atmega48.c **** 
+  89:smps-batterycharger-atmega48.c **** /* Set the TOP value to 64 (6 bits)
+  90:smps-batterycharger-atmega48.c **** TOPSWITCH allows the A/D output to be scaled to match the PWM cycle period */
+  91:smps-batterycharger-atmega48.c **** #define  TOPSHIFT 2
+  92:smps-batterycharger-atmega48.c **** #define  TOP _BV(8-TOPSHIFT)
+  93:smps-batterycharger-atmega48.c **** 
+  94:smps-batterycharger-atmega48.c **** /* 8 cycles of deadtime needed to ensure charge pump remains active.*/
+  95:smps-batterycharger-atmega48.c **** #define  DEADTIME (TOP >> 3)
+  96:smps-batterycharger-atmega48.c **** 
+  97:smps-batterycharger-atmega48.c **** /*****************************************************************************/
+  98:smps-batterycharger-atmega48.c **** 
+  99:smps-batterycharger-atmega48.c **** uint8_t buttonPressed(void);
+ 100:smps-batterycharger-atmega48.c **** 
+ 101:smps-batterycharger-atmega48.c **** /*****************************************************************************/
+ 102:smps-batterycharger-atmega48.c **** /* Global Variables */
+ 103:smps-batterycharger-atmega48.c **** 
+ 104:smps-batterycharger-atmega48.c **** /* State variables for sequencing operations */
+ 105:smps-batterycharger-atmega48.c ****     uint8_t stage = 0;          /* Charging stage - setup, charge, float */
+ 106:smps-batterycharger-atmega48.c **** 
+ 107:smps-batterycharger-atmega48.c **** /* Set desired voltage and current to an initial state */
+ 108:smps-batterycharger-atmega48.c ****     uint8_t voltage = 103;      /* 7.5V initial limit */
+ 109:smps-batterycharger-atmega48.c ****     uint8_t current = 82;       /* 1.6A for a 4AH battery */
+ 110:smps-batterycharger-atmega48.c ****     uint8_t boostmax = 32;      /* Limit to prevent excessive voltages */
+ 111:smps-batterycharger-atmega48.c ****     uint8_t buckmax = TOP - DEADTIME;   /* cannot turn fully on */
+ 112:smps-batterycharger-atmega48.c **** 
+ 113:smps-batterycharger-atmega48.c **** /* Initialise the main control variables. Start with all power off */
+ 114:smps-batterycharger-atmega48.c ****     uint8_t buck = 0;
+ 115:smps-batterycharger-atmega48.c ****     uint8_t boost = 0;
+ 116:smps-batterycharger-atmega48.c **** /* Measured voltages and output current */
+ 117:smps-batterycharger-atmega48.c ****     uint8_t vin = 0xA4;         /* Set vin to about 12V */
+ 118:smps-batterycharger-atmega48.c ****     uint8_t iout = 0;
+ 119:smps-batterycharger-atmega48.c ****     uint8_t vout = 0;
+ 120:smps-batterycharger-atmega48.c **** 
+ 121:smps-batterycharger-atmega48.c **** /* The counter allows A/D conversions of input voltage and output current
+ 122:smps-batterycharger-atmega48.c **** to be made every second cycle, thus reducing the number of conversions
+ 123:smps-batterycharger-atmega48.c **** required each cycle to be two rather than three. The output voltage
+ 124:smps-batterycharger-atmega48.c **** is sampled every cycle to keep ripple down. The counter also is used
+ 125:smps-batterycharger-atmega48.c **** to slow down certain operations, such as increasing boost voltage.*/
+ 126:smps-batterycharger-atmega48.c ****     uint16_t counter = 0;
+ 127:smps-batterycharger-atmega48.c **** 
+ 128:smps-batterycharger-atmega48.c **** /* Button debounce */
+ 129:smps-batterycharger-atmega48.c ****     uint8_t debounceCounter = 0;
+ 130:smps-batterycharger-atmega48.c ****     uint8_t buttonDown = 0;
+ 131:smps-batterycharger-atmega48.c **** 
+ 132:smps-batterycharger-atmega48.c **** /****************************************************************************/
+ 133:smps-batterycharger-atmega48.c **** /** @brief Main Program */
+ 134:smps-batterycharger-atmega48.c **** 
+ 135:smps-batterycharger-atmega48.c **** int main(void)
+ 136:smps-batterycharger-atmega48.c **** {
+  77               	.LM0:
+  78               	.LFBB1:
+  79 0000 5F92      		push r5
+  80 0002 6F92      		push r6
+  81 0004 7F92      		push r7
+  82 0006 8F92      		push r8
+  83 0008 9F92      		push r9
+  84 000a AF92      		push r10
+  85 000c BF92      		push r11
+  86 000e CF92      		push r12
+  87 0010 DF92      		push r13
+  88 0012 EF92      		push r14
+  89 0014 FF92      		push r15
+  90 0016 0F93      		push r16
+  91 0018 1F93      		push r17
+  92               	/* prologue: function */
+  93               	/* frame size = 0 */
+  94               	/* stack size = 13 */
+  95               	.L__stack_usage = 13
+ 137:smps-batterycharger-atmega48.c **** /* Stop watchdog timer while setting up */
+ 138:smps-batterycharger-atmega48.c ****     cbi(MCUSR,WDRF);
+  97               	.LM1:
+  98 001a 84B7      		in r24,84-32
+  99 001c 877F      		andi r24,lo8(-9)
+ 100 001e 84BF      		out 84-32,r24
+ 139:smps-batterycharger-atmega48.c ****     wdt_disable();
+ 102               	.LM2:
+ 103 0020 88E1      		ldi r24,lo8(24)
+ 104               	/* #APP */
+ 105               	 ;  139 "smps-batterycharger-atmega48.c" 1
+ 106 0022 0FB6      		in __tmp_reg__, __SREG__
+ 107 0024 F894      		cli
+ 108 0026 8093 6000 		sts 96, r24
+ 109 002a 1092 6000 		sts 96, __zero_reg__
+ 110 002e 0FBE      		out __SREG__,__tmp_reg__
+ 111               		
+ 112               	 ;  0 "" 2
+ 140:smps-batterycharger-atmega48.c **** /* Set first three ADC port C pins (analogue inputs) as inputs */
+ 141:smps-batterycharger-atmega48.c ****     outb(DDRC,inb(DDRC) & 0xF8);
+ 114               	.LM3:
+ 115               	/* #NOAPP */
+ 116 0030 87B1      		in r24,39-32
+ 117 0032 887F      		andi r24,lo8(-8)
+ 118 0034 87B9      		out 39-32,r24
+ 142:smps-batterycharger-atmega48.c ****     outb(ADCSRB,0x00);
+ 120               	.LM4:
+ 121 0036 1092 7B00 		sts 123,__zero_reg__
+ 143:smps-batterycharger-atmega48.c **** /* Setup the PWM ports and output compares to default values */
+ 144:smps-batterycharger-atmega48.c ****     outb(DDRB,inb(DDRB) | 0xC6);/* Outputs for OC1 ports, battery LEDs */
+ 123               	.LM5:
+ 124 003a 84B1      		in r24,36-32
+ 125 003c 866C      		ori r24,lo8(-58)
+ 126 003e 84B9      		out 36-32,r24
+ 145:smps-batterycharger-atmega48.c ****     outb(TCCR1A,0xF2);          /* Set OC1A, Set OC1B on upcount, set Phase- */
+ 128               	.LM6:
+ 129 0040 82EF      		ldi r24,lo8(-14)
+ 130 0042 8093 8000 		sts 128,r24
+ 146:smps-batterycharger-atmega48.c ****     outb(TCCR1B,0x11);          /*  -Correct Mode using ICR1, clock with no prescale*/
+ 132               	.LM7:
+ 133 0046 81E1      		ldi r24,lo8(17)
+ 134 0048 8093 8100 		sts 129,r24
+ 147:smps-batterycharger-atmega48.c ****     outb(TCCR1C,0x00);          /* not used */
+ 136               	.LM8:
+ 137 004c 1092 8200 		sts 130,__zero_reg__
+ 148:smps-batterycharger-atmega48.c ****     outb(ICR1H,0x00);           /* Set TOP value */
+ 139               	.LM9:
+ 140 0050 1092 8700 		sts 135,__zero_reg__
+ 149:smps-batterycharger-atmega48.c ****     outb(ICR1L,TOP);
+ 142               	.LM10:
+ 143 0054 80E4      		ldi r24,lo8(64)
+ 144 0056 8093 8600 		sts 134,r24
+ 150:smps-batterycharger-atmega48.c ****     outb(OCR1AH,0x00);          /* Set output compares */
+ 146               	.LM11:
+ 147 005a 1092 8900 		sts 137,__zero_reg__
+ 151:smps-batterycharger-atmega48.c ****     outb(OCR1AL,buck);          /* Buck duty cycle */
+ 149               	.LM12:
+ 150 005e 7091 0000 		lds r23,buck
+ 151 0062 7093 8800 		sts 136,r23
+ 152:smps-batterycharger-atmega48.c ****     outb(OCR1BH,0x00);
+ 153               	.LM13:
+ 154 0066 1092 8B00 		sts 139,__zero_reg__
+ 153:smps-batterycharger-atmega48.c ****     outb(OCR1BL,boost);         /* Boost duty cycle */
+ 156               	.LM14:
+ 157 006a 5091 0000 		lds r21,boost
+ 158 006e 5093 8A00 		sts 138,r21
+ 154:smps-batterycharger-atmega48.c **** /* Setup Port D as control inputs (0,1,3) status outputs (4-7) and blocking control (2)*/
+ 155:smps-batterycharger-atmega48.c ****     outb(DDRD,0xF4);
+ 160               	.LM15:
+ 161 0072 84EF      		ldi r24,lo8(-12)
+ 162 0074 8AB9      		out 42-32,r24
+ 156:smps-batterycharger-atmega48.c **** /* Power down Timers 0,2, TWI, SPI and USART */
+ 157:smps-batterycharger-atmega48.c ****     outb(PRR,0xE6);
+ 164               	.LM16:
+ 165 0076 86EE      		ldi r24,lo8(-26)
+ 166 0078 8093 6400 		sts 100,r24
+ 158:smps-batterycharger-atmega48.c **** /* Turn off the reversed battery blocking MOSFET */
+ 159:smps-batterycharger-atmega48.c ****     cbi(PORTD, 2);
+ 168               	.LM17:
+ 169 007c 5A98      		cbi 43-32,2
+ 160:smps-batterycharger-atmega48.c **** /* Start the Watchdog Timer */
+ 161:smps-batterycharger-atmega48.c ****     wdt_enable(WDTO_15MS);
+ 171               	.LM18:
+ 172 007e 28E0      		ldi r18,lo8(8)
+ 173 0080 88E1      		ldi r24,lo8(24)
+ 174 0082 90E0      		ldi r25,hi8(24)
+ 175               	/* #APP */
+ 176               	 ;  161 "smps-batterycharger-atmega48.c" 1
+ 177 0084 0FB6      		in __tmp_reg__,__SREG__
+ 178 0086 F894      		cli
+ 179 0088 A895      		wdr
+ 180 008a 8093 6000 		sts 96,r24
+ 181 008e 0FBE      		out __SREG__,__tmp_reg__
+ 182 0090 2093 6000 		sts 96,r18
+ 183               		
+ 184               	 ;  0 "" 2
+ 185               	/* #NOAPP */
+ 186 0094 8091 0000 		lds r24,counter
+ 187 0098 9091 0000 		lds r25,counter+1
+ 188 009c E091 0000 		lds r30,stage
+ 189 00a0 7090 0000 		lds r7,buckmax
+ 190               	.LBB2:
+ 162:smps-batterycharger-atmega48.c **** 
+ 163:smps-batterycharger-atmega48.c **** /****************************************************************************/
+ 164:smps-batterycharger-atmega48.c **** /* Main Loop */
+ 165:smps-batterycharger-atmega48.c **** /* The variable "stage" puts the loop into a precharge (0) or charging (1) state.
+ 166:smps-batterycharger-atmega48.c **** Start off in precharge to detect the battery presence and determine its voltage.
+ 167:smps-batterycharger-atmega48.c **** The capacity switches are read and the current limit is set.
+ 168:smps-batterycharger-atmega48.c **** The A/D converters are read. */
+ 169:smps-batterycharger-atmega48.c **** /****************************************************************************/
+ 170:smps-batterycharger-atmega48.c ****     for(;;)
+ 171:smps-batterycharger-atmega48.c ****     {
+ 172:smps-batterycharger-atmega48.c ****         wdt_reset();            /* Reset the watchdog timer */
+ 173:smps-batterycharger-atmega48.c **** 
+ 174:smps-batterycharger-atmega48.c **** /* Read PORTD for switch status. The capacity switch is always monitored to allow
+ 175:smps-batterycharger-atmega48.c **** it to be changed on the fly. */
+ 176:smps-batterycharger-atmega48.c **** 
+ 177:smps-batterycharger-atmega48.c ****         uint8_t capacity = inb(PIND) & 0x03;
+ 178:smps-batterycharger-atmega48.c ****         current = 32;                           /* 1AH */
+ 192               	.LM19:
+ 193 00a4 A0E2      		ldi r26,lo8(32)
+ 179:smps-batterycharger-atmega48.c ****         if (capacity == 1) current = 70;        /* 4AH */
+ 180:smps-batterycharger-atmega48.c ****         else if (capacity == 2) current =104;   /* 6AH */
+ 181:smps-batterycharger-atmega48.c ****         else if (capacity == 3) current =156;   /* 9AH */
+ 195               	.LM20:
+ 196 00a6 6CE9      		ldi r22,lo8(-100)
+ 197 00a8 C62E      		mov r12,r22
+ 180:smps-batterycharger-atmega48.c ****         else if (capacity == 2) current =104;   /* 6AH */
+ 199               	.LM21:
+ 200 00aa 48E6      		ldi r20,lo8(104)
+ 201 00ac D42E      		mov r13,r20
+ 179:smps-batterycharger-atmega48.c ****         if (capacity == 1) current = 70;        /* 4AH */
+ 203               	.LM22:
+ 204 00ae 36E4      		ldi r19,lo8(70)
+ 205 00b0 F32E      		mov r15,r19
+ 182:smps-batterycharger-atmega48.c **** 
+ 183:smps-batterycharger-atmega48.c **** /* Start A/D for first conversion (output voltage feedback) every cycle */
+ 184:smps-batterycharger-atmega48.c ****         outb(ADMUX,0x60);       /* MUX AD0, AVcc reference 5V, left adjust */
+ 207               	.LM23:
+ 208 00b2 F0E6      		ldi r31,lo8(96)
+ 185:smps-batterycharger-atmega48.c ****         outb(ADCSRA,0xC3);      /* Start Conversion, clock divider 8 (1MHz) */
+ 210               	.LM24:
+ 211 00b4 63EC      		ldi r22,lo8(-61)
+ 186:smps-batterycharger-atmega48.c ****         while ((inb(ADCSRA) & _BV(ADSC)) > 0);  /* poll busy on ADC */
+ 187:smps-batterycharger-atmega48.c ****         vout = inb(ADCH);
+ 188:smps-batterycharger-atmega48.c **** 
+ 189:smps-batterycharger-atmega48.c ****         if ((counter & 0x01) == 0)
+ 190:smps-batterycharger-atmega48.c ****         {
+ 191:smps-batterycharger-atmega48.c **** /* Start A/D for second conversion (output current feedback) alternate cycle */
+ 192:smps-batterycharger-atmega48.c ****             outb(ADMUX,0x61);   /* MUX AD1, AVcc reference 5V, left adjust */
+ 193:smps-batterycharger-atmega48.c ****             outb(ADCSRA,0xC3);  /* Start Conversion, clock divider 8 (1MHz) */
+ 194:smps-batterycharger-atmega48.c ****             while ((inb(ADCSRA) & _BV(ADSC)) > 0);  /* poll busy on ADC */
+ 195:smps-batterycharger-atmega48.c ****             iout = inb(ADCH);
+ 196:smps-batterycharger-atmega48.c ****         }
+ 197:smps-batterycharger-atmega48.c ****         else
+ 198:smps-batterycharger-atmega48.c ****         {
+ 199:smps-batterycharger-atmega48.c **** /* Start A/D for third conversion (input voltage feedforward) alternate cycle */
+ 200:smps-batterycharger-atmega48.c ****             outb(ADMUX,0x62);   /* MUX AD2, AVcc reference 5V, left adjust */
+ 213               	.LM25:
+ 214 00b6 12E6      		ldi r17,lo8(98)
+ 192:smps-batterycharger-atmega48.c ****             outb(ADMUX,0x61);   /* MUX AD1, AVcc reference 5V, left adjust */
+ 216               	.LM26:
+ 217 00b8 B1E6      		ldi r27,lo8(97)
+ 201:smps-batterycharger-atmega48.c ****             outb(ADCSRA,0xC3);  /* Start Conversion, clock divider 8 (1MHz) */
+ 202:smps-batterycharger-atmega48.c ****             while ((inb(ADCSRA) & _BV(ADSC)) > 0);  /* poll busy on ADC */
+ 203:smps-batterycharger-atmega48.c ****             vin = inb(ADCH);
+ 204:smps-batterycharger-atmega48.c ****         }
+ 205:smps-batterycharger-atmega48.c **** 
+ 206:smps-batterycharger-atmega48.c **** /****************************************************************************/
+ 207:smps-batterycharger-atmega48.c **** /**** Stage 0 is a pre-charging state used to compute battery presence and
+ 208:smps-batterycharger-atmega48.c **** terminal voltage. */
+ 209:smps-batterycharger-atmega48.c ****         if (stage == 0)
+ 210:smps-batterycharger-atmega48.c ****         {
+ 211:smps-batterycharger-atmega48.c ****             buck = 0;
+ 212:smps-batterycharger-atmega48.c ****             boost = 0;          /* Turn off the power */
+ 213:smps-batterycharger-atmega48.c **** 
+ 214:smps-batterycharger-atmega48.c **** /* Keep the reversed battery blocking MOSFET off */
+ 215:smps-batterycharger-atmega48.c ****             cbi(PORTD, 2);
+ 216:smps-batterycharger-atmega48.c **** 
+ 217:smps-batterycharger-atmega48.c **** /* Flash the pre-charger state indicator */
+ 218:smps-batterycharger-atmega48.c ****             if ((counter & 0x4000) == 0) cbi(PORTD, 4); else sbi(PORTD, 4);
+ 219:smps-batterycharger-atmega48.c **** 
+ 220:smps-batterycharger-atmega48.c **** /* Clear the charging indicators */
+ 221:smps-batterycharger-atmega48.c ****             cbi(PORTD, 5);
+ 222:smps-batterycharger-atmega48.c ****             cbi(PORTD, 6);
+ 223:smps-batterycharger-atmega48.c ****             cbi(PORTD, 7);
+ 224:smps-batterycharger-atmega48.c **** 
+ 225:smps-batterycharger-atmega48.c **** /* Select 12V charging if battery voltage is greater than 8V */
+ 226:smps-batterycharger-atmega48.c ****             if (vout > 110)
+ 227:smps-batterycharger-atmega48.c ****             {
+ 228:smps-batterycharger-atmega48.c ****                 voltage = 206;
+ 229:smps-batterycharger-atmega48.c ****                 sbi(PORTB, 7);  /* 12V */
+ 230:smps-batterycharger-atmega48.c ****                 cbi(PORTB, 6);
+ 231:smps-batterycharger-atmega48.c ****             }
+ 232:smps-batterycharger-atmega48.c **** /* Select 6V charging if battery voltage is between 4V and 8V */
+ 233:smps-batterycharger-atmega48.c ****             else if (vout > 55)
+ 234:smps-batterycharger-atmega48.c ****             {
+ 235:smps-batterycharger-atmega48.c ****                 voltage = 103;
+ 236:smps-batterycharger-atmega48.c ****                 sbi(PORTB, 6);  /* 6V */
+ 237:smps-batterycharger-atmega48.c ****                 cbi(PORTB, 7);
+ 238:smps-batterycharger-atmega48.c ****             }
+ 239:smps-batterycharger-atmega48.c **** 
+ 240:smps-batterycharger-atmega48.c **** /* Otherwise we probably have no battery present. Force to stay in
+ 241:smps-batterycharger-atmega48.c **** stage 0 and flash the voltage LEDs*/
+ 242:smps-batterycharger-atmega48.c ****             else
+ 243:smps-batterycharger-atmega48.c ****             {
+ 244:smps-batterycharger-atmega48.c ****                 voltage = 0;
+ 245:smps-batterycharger-atmega48.c ****                 if ((counter & 0x2000) == 0) cbi(PORTB, 6); else sbi(PORTB, 6);
+ 246:smps-batterycharger-atmega48.c ****                 if ((counter & 0x2000) == 0) sbi(PORTB, 7); else cbi(PORTB, 7);
+ 247:smps-batterycharger-atmega48.c ****             }
+ 248:smps-batterycharger-atmega48.c **** 
+ 249:smps-batterycharger-atmega48.c **** /* Test the start switch and if pressed and the battery is OK, proceed to
+ 250:smps-batterycharger-atmega48.c **** stage 1 to start charging.*/
+ 251:smps-batterycharger-atmega48.c ****             if ((vout > 55) && ((inb(PIND) & _BV(3)) == 0))
+ 252:smps-batterycharger-atmega48.c ****             {
+ 253:smps-batterycharger-atmega48.c ****                 stage = 1;
+ 254:smps-batterycharger-atmega48.c ****                 counter = 0;
+ 255:smps-batterycharger-atmega48.c ****                 sbi(PORTD, 2); /* Turn on the reversed battery blocking MOSFET */
+ 256:smps-batterycharger-atmega48.c ****             }
+ 257:smps-batterycharger-atmega48.c ****         }
+ 258:smps-batterycharger-atmega48.c **** 
+ 259:smps-batterycharger-atmega48.c **** /****************************************************************************/
+ 260:smps-batterycharger-atmega48.c **** /**** Stage 1 is the charging phase, and stage 2 is the final float stage. */
+ 261:smps-batterycharger-atmega48.c ****         else
+ 262:smps-batterycharger-atmega48.c ****         {
+ 263:smps-batterycharger-atmega48.c **** /* Check for the output voltage very high and battery current very low.
+ 264:smps-batterycharger-atmega48.c **** The battery maximum, for a 12V battery, is going to be 15V (206). When
+ 265:smps-batterycharger-atmega48.c **** disconnected the voltage should rise well above this. We can detect this to
+ 266:smps-batterycharger-atmega48.c **** determine disconnect and so drop back out to the pre-charge stage. */
+ 267:smps-batterycharger-atmega48.c ****             if ((vout > 250) && (iout < 0x02)) stage = 0;
+ 268:smps-batterycharger-atmega48.c ****             else
+ 269:smps-batterycharger-atmega48.c ****             {
+ 270:smps-batterycharger-atmega48.c **** /* Set the charger state indicator fully on*/
+ 271:smps-batterycharger-atmega48.c ****                 sbi(PORTD, 4);
+ 272:smps-batterycharger-atmega48.c **** 
+ 273:smps-batterycharger-atmega48.c **** /**** This is the buck-boost control algorithm with voltage/current limits */
+ 274:smps-batterycharger-atmega48.c **** 
+ 275:smps-batterycharger-atmega48.c **** /* Start by computing a maximum boost duty cycle according to the input
+ 276:smps-batterycharger-atmega48.c **** voltage. This will be used when the buck is less than full on */
+ 277:smps-batterycharger-atmega48.c ****                 boostmax = TOP-(vin >> 2);  /* 64 - vin/4 */
+ 219               	.LM27:
+ 220 00ba 00E4      		ldi r16,lo8(64)
+ 278:smps-batterycharger-atmega48.c **** 
+ 279:smps-batterycharger-atmega48.c **** /* The algorithm increases buck to its maximum as long as the limit
+ 280:smps-batterycharger-atmega48.c **** trigger is not satisfied. Then it increases boost to its maximum. If the
+ 281:smps-batterycharger-atmega48.c **** condition is still not satisfied, it continues to increase boost, but
+ 282:smps-batterycharger-atmega48.c **** only very slowly. If the condition is satisfied, start reducing boost
+ 283:smps-batterycharger-atmega48.c **** till it hits a small value. We do not reduce this to zero so that when
+ 284:smps-batterycharger-atmega48.c **** the battery is disconnected the output voltage will rise to a high enough
+ 285:smps-batterycharger-atmega48.c **** value to detect that the battery is gone. After that reduce the buck.
+ 286:smps-batterycharger-atmega48.c **** However we won't reduce buck too far lest it turn off the current. */
+ 287:smps-batterycharger-atmega48.c ****                 if ((vout < voltage) && (iout < current))
+ 288:smps-batterycharger-atmega48.c ****                 {
+ 289:smps-batterycharger-atmega48.c ****                     if (buck < buckmax) buck++;
+ 290:smps-batterycharger-atmega48.c ****                     else if ((boost < boostmax) && ((counter & 0x0F) == 0)) boost++;
+ 291:smps-batterycharger-atmega48.c ****                 }
+ 292:smps-batterycharger-atmega48.c ****                 else
+ 293:smps-batterycharger-atmega48.c ****                 {
+ 294:smps-batterycharger-atmega48.c ****                     if (boost > 1) boost--;
+ 295:smps-batterycharger-atmega48.c ****                     else if (buck > 0x10) buck--;
+ 296:smps-batterycharger-atmega48.c ****                 }
+ 297:smps-batterycharger-atmega48.c **** 
+ 298:smps-batterycharger-atmega48.c **** /* Set the appropriate indicators if still in the bulk or absorption stage */
+ 299:smps-batterycharger-atmega48.c ****                 if (stage == 1)
+ 300:smps-batterycharger-atmega48.c ****                 {
+ 301:smps-batterycharger-atmega48.c **** /* Keep the float charge indicator clear */
+ 302:smps-batterycharger-atmega48.c ****                     cbi(PORTD, 7);
+ 303:smps-batterycharger-atmega48.c **** /* If overvoltage then we are in absorption phase */
+ 304:smps-batterycharger-atmega48.c ****                     if (vout > voltage) sbi(PORTD, 6); else cbi(PORTD, 6);
+ 305:smps-batterycharger-atmega48.c **** /* If overcurrent we are in bulk charge phase */
+ 306:smps-batterycharger-atmega48.c ****                     if (iout > current) sbi(PORTD, 5); else cbi(PORTD, 5);
+ 307:smps-batterycharger-atmega48.c ****                 }
+ 308:smps-batterycharger-atmega48.c **** 
+ 309:smps-batterycharger-atmega48.c **** /**** This is the SLA charger algorithm. */
+ 310:smps-batterycharger-atmega48.c **** 
+ 311:smps-batterycharger-atmega48.c **** /* If the average current drops to less than 0.05C, enter the float stage. Drop the 
+ 312:smps-batterycharger-atmega48.c **** voltage target to 2.3V per cell. Start checking after startup has settled. */
+ 313:smps-batterycharger-atmega48.c ****                 if ((counter > 0xEFFF) && (iout <= (current >> 4)))
+ 314:smps-batterycharger-atmega48.c ****                 {
+ 315:smps-batterycharger-atmega48.c ****                     stage = 2;          /* Move to float stage and stay there */
+ 222               	.LM28:
+ 223 00bc 22E0      		ldi r18,lo8(2)
+ 224 00be 822E      		mov r8,r18
+ 316:smps-batterycharger-atmega48.c ****                     cbi(PORTD, 5);
+ 317:smps-batterycharger-atmega48.c ****                     cbi(PORTD, 6);
+ 318:smps-batterycharger-atmega48.c ****                     sbi(PORTD, 7);
+ 319:smps-batterycharger-atmega48.c ****                     voltage = 94;       /* drop to 2.3V per cell */
+ 226               	.LM29:
+ 227 00c0 4EE5      		ldi r20,lo8(94)
+ 228 00c2 942E      		mov r9,r20
+ 253:smps-batterycharger-atmega48.c ****                 stage = 1;
+ 230               	.LM30:
+ 231 00c4 AA24      		clr r10
+ 232 00c6 A394      		inc r10
+ 235:smps-batterycharger-atmega48.c ****                 voltage = 103;
+ 234               	.LM31:
+ 235 00c8 37E6      		ldi r19,lo8(103)
+ 236 00ca B32E      		mov r11,r19
+ 228:smps-batterycharger-atmega48.c ****                 voltage = 206;
+ 238               	.LM32:
+ 239 00cc 2EEC      		ldi r18,lo8(-50)
+ 240 00ce E22E      		mov r14,r18
+ 172:smps-batterycharger-atmega48.c ****         wdt_reset();            /* Reset the watchdog timer */
+ 242               	.LM33:
+ 243               	/* #APP */
+ 244               	 ;  172 "smps-batterycharger-atmega48.c" 1
+ 245 00d0 A895      		wdr
+ 246               	 ;  0 "" 2
+ 177:smps-batterycharger-atmega48.c ****         uint8_t capacity = inb(PIND) & 0x03;
+ 248               	.LM34:
+ 249               	/* #NOAPP */
+ 250 00d2 29B1      		in r18,41-32
+ 251 00d4 2370      		andi r18,lo8(3)
+ 178:smps-batterycharger-atmega48.c ****         current = 32;                           /* 1AH */
+ 253               	.LM35:
+ 254 00d6 A093 0000 		sts current,r26
+ 179:smps-batterycharger-atmega48.c ****         if (capacity == 1) current = 70;        /* 4AH */
+ 256               	.LM36:
+ 257 00da 2130      		cpi r18,lo8(1)
+ 258 00dc 01F4      		brne .+2
+ 259 00de 00C0      		rjmp .L39
+ 260               	.L2:
+ 180:smps-batterycharger-atmega48.c ****         else if (capacity == 2) current =104;   /* 6AH */
+ 262               	.LM37:
+ 263 00e0 2230      		cpi r18,lo8(2)
+ 264 00e2 01F4      		brne .+2
+ 265 00e4 00C0      		rjmp .L40
+ 181:smps-batterycharger-atmega48.c ****         else if (capacity == 3) current =156;   /* 9AH */
+ 267               	.LM38:
+ 268 00e6 2330      		cpi r18,lo8(3)
+ 269 00e8 01F4      		brne .+2
+ 270 00ea 00C0      		rjmp .L41
+ 271               	.L3:
+ 184:smps-batterycharger-atmega48.c ****         outb(ADMUX,0x60);       /* MUX AD0, AVcc reference 5V, left adjust */
+ 273               	.LM39:
+ 274 00ec F093 7C00 		sts 124,r31
+ 185:smps-batterycharger-atmega48.c ****         outb(ADCSRA,0xC3);      /* Start Conversion, clock divider 8 (1MHz) */
+ 276               	.LM40:
+ 277 00f0 6093 7A00 		sts 122,r22
+ 278               	.L5:
+ 186:smps-batterycharger-atmega48.c ****         while ((inb(ADCSRA) & _BV(ADSC)) > 0);  /* poll busy on ADC */
+ 280               	.LM41:
+ 281 00f4 2091 7A00 		lds r18,122
+ 282 00f8 26FD      		sbrc r18,6
+ 283 00fa 00C0      		rjmp .L5
+ 187:smps-batterycharger-atmega48.c ****         vout = inb(ADCH);
+ 285               	.LM42:
+ 286 00fc 2091 7900 		lds r18,121
+ 287 0100 2093 0000 		sts vout,r18
+ 189:smps-batterycharger-atmega48.c ****         if ((counter & 0x01) == 0)
+ 289               	.LM43:
+ 290 0104 80FD      		sbrc r24,0
+ 291 0106 00C0      		rjmp .L6
+ 192:smps-batterycharger-atmega48.c ****             outb(ADMUX,0x61);   /* MUX AD1, AVcc reference 5V, left adjust */
+ 293               	.LM44:
+ 294 0108 B093 7C00 		sts 124,r27
+ 193:smps-batterycharger-atmega48.c ****             outb(ADCSRA,0xC3);  /* Start Conversion, clock divider 8 (1MHz) */
+ 296               	.LM45:
+ 297 010c 6093 7A00 		sts 122,r22
+ 298               	.L7:
+ 194:smps-batterycharger-atmega48.c ****             while ((inb(ADCSRA) & _BV(ADSC)) > 0);  /* poll busy on ADC */
+ 300               	.LM46:
+ 301 0110 2091 7A00 		lds r18,122
+ 302 0114 26FD      		sbrc r18,6
+ 303 0116 00C0      		rjmp .L7
+ 195:smps-batterycharger-atmega48.c ****             iout = inb(ADCH);
+ 305               	.LM47:
+ 306 0118 2091 7900 		lds r18,121
+ 307 011c 2093 0000 		sts iout,r18
+ 209:smps-batterycharger-atmega48.c ****         if (stage == 0)
+ 309               	.LM48:
+ 310 0120 EE23      		tst r30
+ 311 0122 01F0      		breq .+2
+ 312 0124 00C0      		rjmp .L10
+ 313               	.L42:
+ 211:smps-batterycharger-atmega48.c ****             buck = 0;
+ 315               	.LM49:
+ 316 0126 1092 0000 		sts buck,__zero_reg__
+ 212:smps-batterycharger-atmega48.c ****             boost = 0;          /* Turn off the power */
+ 318               	.LM50:
+ 319 012a 1092 0000 		sts boost,__zero_reg__
+ 215:smps-batterycharger-atmega48.c ****             cbi(PORTD, 2);
+ 321               	.LM51:
+ 322 012e 5A98      		cbi 43-32,2
+ 218:smps-batterycharger-atmega48.c ****             if ((counter & 0x4000) == 0) cbi(PORTD, 4); else sbi(PORTD, 4);
+ 324               	.LM52:
+ 325 0130 96FD      		sbrc r25,6
+ 326 0132 00C0      		rjmp .L11
+ 218:smps-batterycharger-atmega48.c ****             if ((counter & 0x4000) == 0) cbi(PORTD, 4); else sbi(PORTD, 4);
+ 328               	.LM53:
+ 329 0134 5C98      		cbi 43-32,4
+ 330               	.L12:
+ 221:smps-batterycharger-atmega48.c ****             cbi(PORTD, 5);
+ 332               	.LM54:
+ 333 0136 5D98      		cbi 43-32,5
+ 222:smps-batterycharger-atmega48.c ****             cbi(PORTD, 6);
+ 335               	.LM55:
+ 336 0138 5E98      		cbi 43-32,6
+ 223:smps-batterycharger-atmega48.c ****             cbi(PORTD, 7);
+ 338               	.LM56:
+ 339 013a 5F98      		cbi 43-32,7
+ 226:smps-batterycharger-atmega48.c ****             if (vout > 110)
+ 341               	.LM57:
+ 342 013c 4091 0000 		lds r20,vout
+ 343 0140 4F36      		cpi r20,lo8(111)
+ 344 0142 00F4      		brsh .+2
+ 345 0144 00C0      		rjmp .L13
+ 228:smps-batterycharger-atmega48.c ****                 voltage = 206;
+ 347               	.LM58:
+ 348 0146 E092 0000 		sts voltage,r14
+ 229:smps-batterycharger-atmega48.c ****                 sbi(PORTB, 7);  /* 12V */
+ 350               	.LM59:
+ 351 014a 2F9A      		sbi 37-32,7
+ 230:smps-batterycharger-atmega48.c ****                 cbi(PORTB, 6);
+ 353               	.LM60:
+ 354 014c 2E98      		cbi 37-32,6
+ 355               	.L14:
+ 251:smps-batterycharger-atmega48.c ****             if ((vout > 55) && ((inb(PIND) & _BV(3)) == 0))
+ 357               	.LM61:
+ 358 014e 4833      		cpi r20,lo8(56)
+ 359 0150 00F4      		brsh .+2
+ 360 0152 00C0      		rjmp .L37
+ 251:smps-batterycharger-atmega48.c ****             if ((vout > 55) && ((inb(PIND) & _BV(3)) == 0))
+ 362               	.LM62:
+ 363 0154 4B99      		sbic 41-32,3
+ 364 0156 00C0      		rjmp .L37
+ 253:smps-batterycharger-atmega48.c ****                 stage = 1;
+ 366               	.LM63:
+ 367 0158 A092 0000 		sts stage,r10
+ 254:smps-batterycharger-atmega48.c ****                 counter = 0;
+ 369               	.LM64:
+ 370 015c 1092 0000 		sts counter+1,__zero_reg__
+ 371 0160 1092 0000 		sts counter,__zero_reg__
+ 255:smps-batterycharger-atmega48.c ****                 sbi(PORTD, 2); /* Turn on the reversed battery blocking MOSFET */
+ 373               	.LM65:
+ 374 0164 5A9A      		sbi 43-32,2
+ 375 0166 7091 0000 		lds r23,buck
+ 376 016a 5091 0000 		lds r21,boost
+ 377 016e 80E0      		ldi r24,lo8(0)
+ 378 0170 90E0      		ldi r25,hi8(0)
+ 379 0172 E1E0      		ldi r30,lo8(1)
+ 380               	.L19:
+ 320:smps-batterycharger-atmega48.c ****                 }
+ 321:smps-batterycharger-atmega48.c ****             }
+ 322:smps-batterycharger-atmega48.c ****         }
+ 323:smps-batterycharger-atmega48.c **** 
+ 324:smps-batterycharger-atmega48.c **** /**** Adjust the computed duty cycle */
+ 325:smps-batterycharger-atmega48.c ****         outb(OCR1AH,0x00);              /* Set the upper PWM bytes to zero */
+ 382               	.LM66:
+ 383 0174 1092 8900 		sts 137,__zero_reg__
+ 326:smps-batterycharger-atmega48.c ****         outb(OCR1BH,0x00);
+ 385               	.LM67:
+ 386 0178 1092 8B00 		sts 139,__zero_reg__
+ 327:smps-batterycharger-atmega48.c ****         outb(OCR1AL,buck);
+ 388               	.LM68:
+ 389 017c 7093 8800 		sts 136,r23
+ 328:smps-batterycharger-atmega48.c ****         outb(OCR1BL,boost);
+ 391               	.LM69:
+ 392 0180 5093 8A00 		sts 138,r21
+ 329:smps-batterycharger-atmega48.c **** 
+ 330:smps-batterycharger-atmega48.c ****         counter++;
+ 394               	.LM70:
+ 395 0184 0196      		adiw r24,1
+ 396 0186 9093 0000 		sts counter+1,r25
+ 397 018a 8093 0000 		sts counter,r24
+ 172:smps-batterycharger-atmega48.c ****         wdt_reset();            /* Reset the watchdog timer */
+ 399               	.LM71:
+ 400               	/* #APP */
+ 401               	 ;  172 "smps-batterycharger-atmega48.c" 1
+ 402 018e A895      		wdr
+ 403               	 ;  0 "" 2
+ 177:smps-batterycharger-atmega48.c ****         uint8_t capacity = inb(PIND) & 0x03;
+ 405               	.LM72:
+ 406               	/* #NOAPP */
+ 407 0190 29B1      		in r18,41-32
+ 408 0192 2370      		andi r18,lo8(3)
+ 178:smps-batterycharger-atmega48.c ****         current = 32;                           /* 1AH */
+ 410               	.LM73:
+ 411 0194 A093 0000 		sts current,r26
+ 179:smps-batterycharger-atmega48.c ****         if (capacity == 1) current = 70;        /* 4AH */
+ 413               	.LM74:
+ 414 0198 2130      		cpi r18,lo8(1)
+ 415 019a 01F0      		breq .+2
+ 416 019c 00C0      		rjmp .L2
+ 417               	.L39:
+ 179:smps-batterycharger-atmega48.c ****         if (capacity == 1) current = 70;        /* 4AH */
+ 419               	.LM75:
+ 420 019e F092 0000 		sts current,r15
+ 421 01a2 00C0      		rjmp .L3
+ 422               	.L6:
+ 200:smps-batterycharger-atmega48.c ****             outb(ADMUX,0x62);   /* MUX AD2, AVcc reference 5V, left adjust */
+ 424               	.LM76:
+ 425 01a4 1093 7C00 		sts 124,r17
+ 201:smps-batterycharger-atmega48.c ****             outb(ADCSRA,0xC3);  /* Start Conversion, clock divider 8 (1MHz) */
+ 427               	.LM77:
+ 428 01a8 6093 7A00 		sts 122,r22
+ 429               	.L9:
+ 202:smps-batterycharger-atmega48.c ****             while ((inb(ADCSRA) & _BV(ADSC)) > 0);  /* poll busy on ADC */
+ 431               	.LM78:
+ 432 01ac 2091 7A00 		lds r18,122
+ 433 01b0 26FD      		sbrc r18,6
+ 434 01b2 00C0      		rjmp .L9
+ 203:smps-batterycharger-atmega48.c ****             vin = inb(ADCH);
+ 436               	.LM79:
+ 437 01b4 2091 7900 		lds r18,121
+ 438 01b8 2093 0000 		sts vin,r18
+ 209:smps-batterycharger-atmega48.c ****         if (stage == 0)
+ 440               	.LM80:
+ 441 01bc EE23      		tst r30
+ 442 01be 01F4      		brne .+2
+ 443 01c0 00C0      		rjmp .L42
+ 444               	.L10:
+ 267:smps-batterycharger-atmega48.c ****             if ((vout > 250) && (iout < 0x02)) stage = 0;
+ 446               	.LM81:
+ 447 01c2 4091 0000 		lds r20,vout
+ 448 01c6 4B3F      		cpi r20,lo8(-5)
+ 449 01c8 00F0      		brlo .L20
+ 267:smps-batterycharger-atmega48.c ****             if ((vout > 250) && (iout < 0x02)) stage = 0;
+ 451               	.LM82:
+ 452 01ca 2091 0000 		lds r18,iout
+ 453 01ce 2230      		cpi r18,lo8(2)
+ 454 01d0 00F4      		brsh .+2
+ 455 01d2 00C0      		rjmp .L43
+ 456               	.L20:
+ 271:smps-batterycharger-atmega48.c ****                 sbi(PORTD, 4);
+ 458               	.LM83:
+ 459 01d4 5C9A      		sbi 43-32,4
+ 277:smps-batterycharger-atmega48.c ****                 boostmax = TOP-(vin >> 2);  /* 64 - vin/4 */
+ 461               	.LM84:
+ 462 01d6 2091 0000 		lds r18,vin
+ 463 01da 2695      		lsr r18
+ 464 01dc 2695      		lsr r18
+ 465 01de 302F      		mov r19,r16
+ 466 01e0 321B      		sub r19,r18
+ 467 01e2 232F      		mov r18,r19
+ 468 01e4 3093 0000 		sts boostmax,r19
+ 287:smps-batterycharger-atmega48.c ****                 if ((vout < voltage) && (iout < current))
+ 470               	.LM85:
+ 471 01e8 6090 0000 		lds r6,voltage
+ 472 01ec 4615      		cp r20,r6
+ 473 01ee 00F4      		brsh .L21
+ 287:smps-batterycharger-atmega48.c ****                 if ((vout < voltage) && (iout < current))
+ 475               	.LM86:
+ 476 01f0 5090 0000 		lds r5,iout
+ 477 01f4 3091 0000 		lds r19,current
+ 478 01f8 5316      		cp r5,r19
+ 479 01fa 00F4      		brsh .L21
+ 289:smps-batterycharger-atmega48.c ****                     if (buck < buckmax) buck++;
+ 481               	.LM87:
+ 482 01fc 7715      		cp r23,r7
+ 483 01fe 00F0      		brlo .+2
+ 484 0200 00C0      		rjmp .L22
+ 289:smps-batterycharger-atmega48.c ****                     if (buck < buckmax) buck++;
+ 486               	.LM88:
+ 487 0202 7F5F      		subi r23,lo8(-(1))
+ 488 0204 7093 0000 		sts buck,r23
+ 489               	.L23:
+ 299:smps-batterycharger-atmega48.c ****                 if (stage == 1)
+ 491               	.LM89:
+ 492 0208 E130      		cpi r30,lo8(1)
+ 493 020a 01F0      		breq .L44
+ 494               	.L25:
+ 313:smps-batterycharger-atmega48.c ****                 if ((counter > 0xEFFF) && (iout <= (current >> 4)))
+ 496               	.LM90:
+ 497 020c 20EF      		ldi r18,hi8(-4096)
+ 498 020e 8030      		cpi r24,lo8(-4096)
+ 499 0210 9207      		cpc r25,r18
+ 500 0212 00F4      		brsh .+2
+ 501 0214 00C0      		rjmp .L19
+ 313:smps-batterycharger-atmega48.c ****                 if ((counter > 0xEFFF) && (iout <= (current >> 4)))
+ 503               	.LM91:
+ 504 0216 2091 0000 		lds r18,current
+ 505 021a 2295      		swap r18
+ 506 021c 2F70      		andi r18,lo8(15)
+ 507 021e 3091 0000 		lds r19,iout
+ 508 0222 2317      		cp r18,r19
+ 509 0224 00F4      		brsh .+2
+ 510 0226 00C0      		rjmp .L19
+ 315:smps-batterycharger-atmega48.c ****                     stage = 2;          /* Move to float stage and stay there */
+ 512               	.LM92:
+ 513 0228 8092 0000 		sts stage,r8
+ 316:smps-batterycharger-atmega48.c ****                     cbi(PORTD, 5);
+ 515               	.LM93:
+ 516 022c 5D98      		cbi 43-32,5
+ 317:smps-batterycharger-atmega48.c ****                     cbi(PORTD, 6);
+ 518               	.LM94:
+ 519 022e 5E98      		cbi 43-32,6
+ 318:smps-batterycharger-atmega48.c ****                     sbi(PORTD, 7);
+ 521               	.LM95:
+ 522 0230 5F9A      		sbi 43-32,7
+ 319:smps-batterycharger-atmega48.c ****                     voltage = 94;       /* drop to 2.3V per cell */
+ 524               	.LM96:
+ 525 0232 9092 0000 		sts voltage,r9
+ 526 0236 E2E0      		ldi r30,lo8(2)
+ 527 0238 00C0      		rjmp .L19
+ 528               	.L37:
+ 529 023a 7091 0000 		lds r23,buck
+ 530 023e 5091 0000 		lds r21,boost
+ 531 0242 00C0      		rjmp .L19
+ 532               	.L21:
+ 294:smps-batterycharger-atmega48.c ****                     if (boost > 1) boost--;
+ 534               	.LM97:
+ 535 0244 5230      		cpi r21,lo8(2)
+ 536 0246 00F0      		brlo .L24
+ 294:smps-batterycharger-atmega48.c ****                     if (boost > 1) boost--;
+ 538               	.LM98:
+ 539 0248 5150      		subi r21,lo8(-(-1))
+ 540 024a 5093 0000 		sts boost,r21
+ 299:smps-batterycharger-atmega48.c ****                 if (stage == 1)
+ 542               	.LM99:
+ 543 024e E130      		cpi r30,lo8(1)
+ 544 0250 01F4      		brne .L25
+ 545               	.L44:
+ 302:smps-batterycharger-atmega48.c ****                     cbi(PORTD, 7);
+ 547               	.LM100:
+ 548 0252 5F98      		cbi 43-32,7
+ 304:smps-batterycharger-atmega48.c ****                     if (vout > voltage) sbi(PORTD, 6); else cbi(PORTD, 6);
+ 550               	.LM101:
+ 551 0254 6416      		cp r6,r20
+ 552 0256 00F4      		brsh .L26
+ 304:smps-batterycharger-atmega48.c ****                     if (vout > voltage) sbi(PORTD, 6); else cbi(PORTD, 6);
+ 554               	.LM102:
+ 555 0258 5E9A      		sbi 43-32,6
+ 556               	.L27:
+ 306:smps-batterycharger-atmega48.c ****                     if (iout > current) sbi(PORTD, 5); else cbi(PORTD, 5);
+ 558               	.LM103:
+ 559 025a 3091 0000 		lds r19,iout
+ 560 025e 2091 0000 		lds r18,current
+ 561 0262 2317      		cp r18,r19
+ 562 0264 00F4      		brsh .L28
+ 306:smps-batterycharger-atmega48.c ****                     if (iout > current) sbi(PORTD, 5); else cbi(PORTD, 5);
+ 564               	.LM104:
+ 565 0266 5D9A      		sbi 43-32,5
+ 566 0268 00C0      		rjmp .L25
+ 567               	.L13:
+ 233:smps-batterycharger-atmega48.c ****             else if (vout > 55)
+ 569               	.LM105:
+ 570 026a 4833      		cpi r20,lo8(56)
+ 571 026c 00F0      		brlo .L15
+ 235:smps-batterycharger-atmega48.c ****                 voltage = 103;
+ 573               	.LM106:
+ 574 026e B092 0000 		sts voltage,r11
+ 236:smps-batterycharger-atmega48.c ****                 sbi(PORTB, 6);  /* 6V */
+ 576               	.LM107:
+ 577 0272 2E9A      		sbi 37-32,6
+ 237:smps-batterycharger-atmega48.c ****                 cbi(PORTB, 7);
+ 579               	.LM108:
+ 580 0274 2F98      		cbi 37-32,7
+ 581 0276 00C0      		rjmp .L14
+ 582               	.L11:
+ 218:smps-batterycharger-atmega48.c ****             if ((counter & 0x4000) == 0) cbi(PORTD, 4); else sbi(PORTD, 4);
+ 584               	.LM109:
+ 585 0278 5C9A      		sbi 43-32,4
+ 586 027a 00C0      		rjmp .L12
+ 587               	.L40:
+ 180:smps-batterycharger-atmega48.c ****         else if (capacity == 2) current =104;   /* 6AH */
+ 589               	.LM110:
+ 590 027c D092 0000 		sts current,r13
+ 591 0280 00C0      		rjmp .L3
+ 592               	.L41:
+ 181:smps-batterycharger-atmega48.c ****         else if (capacity == 3) current =156;   /* 9AH */
+ 594               	.LM111:
+ 595 0282 C092 0000 		sts current,r12
+ 596 0286 00C0      		rjmp .L3
+ 597               	.L15:
+ 244:smps-batterycharger-atmega48.c ****                 voltage = 0;
+ 599               	.LM112:
+ 600 0288 1092 0000 		sts voltage,__zero_reg__
+ 245:smps-batterycharger-atmega48.c ****                 if ((counter & 0x2000) == 0) cbi(PORTB, 6); else sbi(PORTB, 6);
+ 602               	.LM113:
+ 603 028c 95FD      		sbrc r25,5
+ 604 028e 00C0      		rjmp .L16
+ 245:smps-batterycharger-atmega48.c ****                 if ((counter & 0x2000) == 0) cbi(PORTB, 6); else sbi(PORTB, 6);
+ 606               	.LM114:
+ 607 0290 2E98      		cbi 37-32,6
+ 608               	.L17:
+ 246:smps-batterycharger-atmega48.c ****                 if ((counter & 0x2000) == 0) sbi(PORTB, 7); else cbi(PORTB, 7);
+ 610               	.LM115:
+ 611 0292 95FD      		sbrc r25,5
+ 612 0294 00C0      		rjmp .L18
+ 246:smps-batterycharger-atmega48.c ****                 if ((counter & 0x2000) == 0) sbi(PORTB, 7); else cbi(PORTB, 7);
+ 614               	.LM116:
+ 615 0296 2F9A      		sbi 37-32,7
+ 616 0298 00C0      		rjmp .L14
+ 617               	.L24:
+ 295:smps-batterycharger-atmega48.c ****                     else if (buck > 0x10) buck--;
+ 619               	.LM117:
+ 620 029a 7131      		cpi r23,lo8(17)
+ 621 029c 00F4      		brsh .+2
+ 622 029e 00C0      		rjmp .L23
+ 295:smps-batterycharger-atmega48.c ****                     else if (buck > 0x10) buck--;
+ 624               	.LM118:
+ 625 02a0 7150      		subi r23,lo8(-(-1))
+ 626 02a2 7093 0000 		sts buck,r23
+ 627 02a6 00C0      		rjmp .L23
+ 628               	.L43:
+ 267:smps-batterycharger-atmega48.c ****             if ((vout > 250) && (iout < 0x02)) stage = 0;
+ 630               	.LM119:
+ 631 02a8 1092 0000 		sts stage,__zero_reg__
+ 632 02ac E0E0      		ldi r30,lo8(0)
+ 633 02ae 00C0      		rjmp .L19
+ 634               	.L18:
+ 246:smps-batterycharger-atmega48.c ****                 if ((counter & 0x2000) == 0) sbi(PORTB, 7); else cbi(PORTB, 7);
+ 636               	.LM120:
+ 637 02b0 2F98      		cbi 37-32,7
+ 638 02b2 00C0      		rjmp .L14
+ 639               	.L16:
+ 245:smps-batterycharger-atmega48.c ****                 if ((counter & 0x2000) == 0) cbi(PORTB, 6); else sbi(PORTB, 6);
+ 641               	.LM121:
+ 642 02b4 2E9A      		sbi 37-32,6
+ 643 02b6 00C0      		rjmp .L17
+ 644               	.L28:
+ 306:smps-batterycharger-atmega48.c ****                     if (iout > current) sbi(PORTD, 5); else cbi(PORTD, 5);
+ 646               	.LM122:
+ 647 02b8 5D98      		cbi 43-32,5
+ 648 02ba 00C0      		rjmp .L25
+ 649               	.L26:
+ 304:smps-batterycharger-atmega48.c ****                     if (vout > voltage) sbi(PORTD, 6); else cbi(PORTD, 6);
+ 651               	.LM123:
+ 652 02bc 5E98      		cbi 43-32,6
+ 653 02be 00C0      		rjmp .L27
+ 654               	.L22:
+ 290:smps-batterycharger-atmega48.c ****                     else if ((boost < boostmax) && ((counter & 0x0F) == 0)) boost++;
+ 656               	.LM124:
+ 657 02c0 5217      		cp r21,r18
+ 658 02c2 00F0      		brlo .+2
+ 659 02c4 00C0      		rjmp .L23
+ 290:smps-batterycharger-atmega48.c ****                     else if ((boost < boostmax) && ((counter & 0x0F) == 0)) boost++;
+ 661               	.LM125:
+ 662 02c6 9C01      		movw r18,r24
+ 663 02c8 2F70      		andi r18,lo8(15)
+ 664 02ca 3070      		andi r19,hi8(15)
+ 665 02cc 2115      		cp r18,__zero_reg__
+ 666 02ce 3105      		cpc r19,__zero_reg__
+ 667 02d0 01F0      		breq .+2
+ 668 02d2 00C0      		rjmp .L23
+ 669 02d4 5F5F      		subi r21,lo8(-(1))
+ 670 02d6 5093 0000 		sts boost,r21
+ 671 02da 00C0      		rjmp .L23
+ 672               	.LBE2:
+ 677               	.Lscope1:
+ 679               		.stabd	78,0,0
+ 681               	.global	buttonPressed
+ 683               	buttonPressed:
+ 684               		.stabd	46,0,0
+ 331:smps-batterycharger-atmega48.c ****  
+ 332:smps-batterycharger-atmega48.c ****    }
+ 333:smps-batterycharger-atmega48.c **** }
+ 334:smps-batterycharger-atmega48.c **** /****************************************************************************/
+ 335:smps-batterycharger-atmega48.c **** /* Run a debounce check on the button */
+ 336:smps-batterycharger-atmega48.c **** 
+ 337:smps-batterycharger-atmega48.c **** uint8_t buttonPressed(void)
+ 338:smps-batterycharger-atmega48.c **** {
+ 686               	.LM126:
+ 687               	.LFBB2:
+ 688               	/* prologue: function */
+ 689               	/* frame size = 0 */
+ 690               	/* stack size = 0 */
+ 691               	.L__stack_usage = 0
+ 339:smps-batterycharger-atmega48.c ****     uint8_t buttonSense = (inb(PIND) & _BV(3));
+ 693               	.LM127:
+ 694 02dc 39B1      		in r19,41-32
+ 340:smps-batterycharger-atmega48.c ****     if ((buttonDown == 0) != (buttonSense == 0))
+ 696               	.LM128:
+ 697 02de 8091 0000 		lds r24,buttonDown
+ 698 02e2 91E0      		ldi r25,lo8(1)
+ 699 02e4 8111      		cpse r24,__zero_reg__
+ 700 02e6 90E0      		ldi r25,lo8(0)
+ 701               	.L46:
+ 702 02e8 21E0      		ldi r18,lo8(1)
+ 703 02ea 33FD      		sbrc r19,3
+ 704 02ec 20E0      		ldi r18,lo8(0)
+ 705               	.L48:
+ 706 02ee 2917      		cp r18,r25
+ 707 02f0 01F0      		breq .L47
+ 341:smps-batterycharger-atmega48.c ****     {
+ 342:smps-batterycharger-atmega48.c ****         if (debounceCounter++ > 100)
+ 709               	.LM129:
+ 710 02f2 2091 0000 		lds r18,debounceCounter
+ 711 02f6 322F      		mov r19,r18
+ 712 02f8 3F5F      		subi r19,lo8(-(1))
+ 713 02fa 3093 0000 		sts debounceCounter,r19
+ 714 02fe 2536      		cpi r18,lo8(101)
+ 715 0300 00F0      		brlo .L49
+ 343:smps-batterycharger-atmega48.c ****         {
+ 344:smps-batterycharger-atmega48.c ****             debounceCounter = 0;
+ 717               	.LM130:
+ 718 0302 1092 0000 		sts debounceCounter,__zero_reg__
+ 345:smps-batterycharger-atmega48.c ****             if (buttonDown == 0) buttonDown = 1; else buttonDown = 0;
+ 720               	.LM131:
+ 721 0306 9923      		tst r25
+ 722 0308 01F0      		breq .L50
+ 724               	.LM132:
+ 725 030a 81E0      		ldi r24,lo8(1)
+ 726 030c 8093 0000 		sts buttonDown,r24
+ 727 0310 0895      		ret
+ 728               	.L47:
+ 346:smps-batterycharger-atmega48.c ****         }
+ 347:smps-batterycharger-atmega48.c ****     }
+ 348:smps-batterycharger-atmega48.c ****     else debounceCounter = 0;
+ 730               	.LM133:
+ 731 0312 1092 0000 		sts debounceCounter,__zero_reg__
+ 732               	.L49:
+ 349:smps-batterycharger-atmega48.c ****     return buttonDown;
+ 350:smps-batterycharger-atmega48.c **** }
+ 734               	.LM134:
+ 735 0316 0895      		ret
+ 736               	.L50:
+ 345:smps-batterycharger-atmega48.c ****             if (buttonDown == 0) buttonDown = 1; else buttonDown = 0;
+ 738               	.LM135:
+ 739 0318 1092 0000 		sts buttonDown,__zero_reg__
+ 740 031c 80E0      		ldi r24,lo8(0)
+ 741 031e 0895      		ret
+ 743               	.Lscope2:
+ 745               		.stabd	78,0,0
+ 746               	.global	stage
+ 747               	.global	stage
+ 748               		.section .bss
+ 751               	stage:
+ 752 0000 00        		.skip 1,0
+ 753               	.global	voltage
+ 754               		.data
+ 757               	voltage:
+ 758 0000 67        		.byte	103
+ 759               	.global	current
+ 762               	current:
+ 763 0001 52        		.byte	82
+ 764               	.global	boostmax
+ 767               	boostmax:
+ 768 0002 20        		.byte	32
+ 769               	.global	buckmax
+ 772               	buckmax:
+ 773 0003 38        		.byte	56
+ 774               	.global	buck
+ 775               	.global	buck
+ 776               		.section .bss
+ 779               	buck:
+ 780 0001 00        		.skip 1,0
+ 781               	.global	boost
+ 782               	.global	boost
+ 785               	boost:
+ 786 0002 00        		.skip 1,0
+ 787               	.global	vin
+ 788               		.data
+ 791               	vin:
+ 792 0004 A4        		.byte	-92
+ 793               	.global	iout
+ 794               	.global	iout
+ 795               		.section .bss
+ 798               	iout:
+ 799 0003 00        		.skip 1,0
+ 800               	.global	vout
+ 801               	.global	vout
+ 804               	vout:
+ 805 0004 00        		.skip 1,0
+ 806               	.global	counter
+ 807               	.global	counter
+ 810               	counter:
+ 811 0005 0000      		.skip 2,0
+ 812               	.global	debounceCounter
+ 813               	.global	debounceCounter
+ 816               	debounceCounter:
+ 817 0007 00        		.skip 1,0
+ 818               	.global	buttonDown
+ 819               	.global	buttonDown
+ 822               	buttonDown:
+ 823 0008 00        		.skip 1,0
+ 837               		.text
+ 839               	.Letext0:
+ 840               	.global __do_copy_data
+ 841               	.global __do_clear_bss
+DEFINED SYMBOLS
+                            *ABS*:0000000000000000 smps-batterycharger-atmega48.c
+     /tmp/cc5XExKO.s:2      *ABS*:000000000000003f __SREG__
+     /tmp/cc5XExKO.s:3      *ABS*:000000000000003e __SP_H__
+     /tmp/cc5XExKO.s:4      *ABS*:000000000000003d __SP_L__
+     /tmp/cc5XExKO.s:5      *ABS*:0000000000000034 __CCP__
+     /tmp/cc5XExKO.s:6      *ABS*:0000000000000000 __tmp_reg__
+     /tmp/cc5XExKO.s:7      *ABS*:0000000000000001 __zero_reg__
+     /tmp/cc5XExKO.s:74     .text:0000000000000000 main
+     /tmp/cc5XExKO.s:779    .bss:0000000000000001 buck
+     /tmp/cc5XExKO.s:785    .bss:0000000000000002 boost
+     /tmp/cc5XExKO.s:810    .bss:0000000000000005 counter
+     /tmp/cc5XExKO.s:751    .bss:0000000000000000 stage
+     /tmp/cc5XExKO.s:772    .data:0000000000000003 buckmax
+     /tmp/cc5XExKO.s:762    .data:0000000000000001 current
+     /tmp/cc5XExKO.s:804    .bss:0000000000000004 vout
+     /tmp/cc5XExKO.s:798    .bss:0000000000000003 iout
+     /tmp/cc5XExKO.s:757    .data:0000000000000000 voltage
+     /tmp/cc5XExKO.s:791    .data:0000000000000004 vin
+     /tmp/cc5XExKO.s:767    .data:0000000000000002 boostmax
+     /tmp/cc5XExKO.s:683    .text:00000000000002dc buttonPressed
+     /tmp/cc5XExKO.s:822    .bss:0000000000000008 buttonDown
+     /tmp/cc5XExKO.s:816    .bss:0000000000000007 debounceCounter
+
+UNDEFINED SYMBOLS
+__do_copy_data
+__do_clear_bss
