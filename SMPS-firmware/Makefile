@@ -1,6 +1,6 @@
 # Basic makefile K Sarkies
 
-PROJECT		= pwm-tim1
+PROJECT		= buck-pmos-async-ET-STM32F103-
 PREFIX		= arm-none-eabi
 CC			= $(PREFIX)-gcc
 LD			= $(PREFIX)-gcc
