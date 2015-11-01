@@ -16,10 +16,10 @@ BOARD           = ET_STAMP_STM32
 F_XTAL          = 8000000
 SYSCLOCK_CL     = SYSCLK_FREQ_72MHz=72000000
 
-DRIVERS_DIR	    = ../../arm-library/libopencm3-examples/libopencm3
+DRIVERS_DIR	    = /home/ksarkies/Development-Software/arm-library/libopencm3-examples/libopencm3
 DRIVERS_SRC     = $(DRIVERS_DIR)/lib/stm32/f1
 DRIVERS_INC	    = $(DRIVERS_DIR)/include
-FREERTOS_DIR    = ../../arm-library/FreeRTOS
+FREERTOS_DIR    = /home/ksarkies/Development-Software/arm-library/FreeRTOS
 FREERTOS_DEV	= $(FREERTOS_DIR)/Source/portable/GCC/ARM_CM3
 FREERTOS_INC	= $(FREERTOS_DIR)/Source/include
 FREERTOS_SRC	= $(FREERTOS_DIR)/Source
