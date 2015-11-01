@@ -13,6 +13,16 @@ The circuits are intended to demonstrate basic SMPS operations and to
 investigate a range of issues such as management of EMI. In time it is hoped
 to provide useful working circuits.
 
+- Buck Asynchronous MC34063. This is a very basic circuit taken mainly from the
+  MC34063 datasheet.
+- Buck Asynchronous MC34063 boosted with P-MOSFET. This extends the current
+  range of the above circuit using a simple driver circuit.
+- Buck Asynchronous MC34063 constant current circuit for driving LEDs.
+- Buck Synchronous with digital ATMEL 8-bit microcontroller.
+- Buck-Boost Synchronous full H with digital microcontroller control. This
+  provides a template for building a range of experimental circuits up to
+  moderately high currents.
+
 More information is provided at:
 
 http://www.jiggerjuice.info/electronics/projects/power/index.html

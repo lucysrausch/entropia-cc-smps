@@ -6,6 +6,7 @@
 *.srec
 *.a
 *.elf
+*.eep
 *.stylecheck
 *.swp
 *.csv
@@ -19,6 +20,7 @@
 *.pdf
 *.tag
 *.lss
+*.lst
 *.sym
 *.csv
 auxiliary/
