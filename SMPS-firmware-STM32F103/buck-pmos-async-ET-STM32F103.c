@@ -31,7 +31,8 @@ Set timer 1 to PWM mode, centre aligned, 62.5kHz. Set a deadtime.
 #include <libopencm3/stm32/timer.h>
 #include <libopencm3/cm3/nvic.h>
 
-#define PERIOD 100
+#define PERIOD 200
+#define DEADTIME 40
 
 /* Globals */
 
@@ -48,7 +49,8 @@ void hardware_setup(void)
 	rcc_peripheral_enable_clock(&RCC_APB2ENR, RCC_APB2ENR_IOPAEN | RCC_APB2ENR_IOPBEN |
 								 RCC_APB2ENR_IOPCEN | RCC_APB2ENR_AFIOEN);
 
-/* Set ports PA8, PA9, PB13, PB14 for PWM, to 'alternate function output push-pull'. */
+/* Set ports PA8 (TIM1_CH1), PA9 (TIM1_CH2), PB13 (TIM1_CH1N), PB14 (TIM1_CH2N)
+for PWM, to 'alternate function output push-pull'. */
 	gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_50_MHZ,
 		      GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO8 | GPIO9);
 	gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ,
@@ -75,10 +77,16 @@ void hardware_setup(void)
 	timer_set_oc_mode(TIM1, TIM_OC1, TIM_OCM_PWM2);
 	timer_enable_oc_output(TIM1, TIM_OC1);
 	timer_enable_oc_output(TIM1, TIM_OC1N);
+/* Channel 2 is the one in use */
 	timer_set_oc_mode(TIM1, TIM_OC2, TIM_OCM_PWM2);
 	timer_enable_oc_output(TIM1, TIM_OC2);
 	timer_enable_oc_output(TIM1, TIM_OC2N);
 	timer_enable_break_main_output(TIM1);
+/* Set the polarity of OC2N to be low to match that of the OC, for switching
+the low side MOSFET through an inverting level shifter */
+    timer_set_oc_polarity_low(TIM1, TIM_OC2N);
+/* Set the deadtime for OC2N. All deadtimes are set to this. */
+    timer_set_deadtime(TIM1, DEADTIME);
 
 /* The ARR (auto-preload register) sets the PWM period to 62.5kHz from the
 72 MHz clock.*/
