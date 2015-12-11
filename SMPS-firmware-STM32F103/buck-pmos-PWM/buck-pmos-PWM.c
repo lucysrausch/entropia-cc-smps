@@ -3,12 +3,14 @@
 Set GPIO ports for advanced timer 1 to allow alternate function,
 output push-pull.
 
-PA8, PA9 are the timer 1 channels 1 and 2, PB13, PB14 are the inverted
-outputs.
+Two sets of outputs are used to allow a synchronous buck-boost converter.
+Each channel has an normal and inverted output that can have a deadtime
+setting for synchronous operation.
 
-PA8 in STM32F103 seems to be unavailable. Reason and solution unknown.
+PA9, PA10 are the timer 1 channels 2 and 3, PB14, PB15 are the respective
+inverted outputs.
 
-Set timer 1 to PWM mode, centre aligned, 62.5kHz. Set a deadtime.
+Set timer 1 to PWM mode 2, centre aligned, 62.5kHz.
 */
 
 /*
@@ -32,7 +34,7 @@ Set timer 1 to PWM mode, centre aligned, 62.5kHz. Set a deadtime.
 #include <libopencm3/cm3/nvic.h>
 
 #define PERIOD 200
-#define DEADTIME 40
+#define DEADTIME 30
 
 /* Globals */
 
@@ -49,12 +51,12 @@ void hardware_setup(void)
 	rcc_peripheral_enable_clock(&RCC_APB2ENR, RCC_APB2ENR_IOPAEN | RCC_APB2ENR_IOPBEN |
 								 RCC_APB2ENR_IOPCEN | RCC_APB2ENR_AFIOEN);
 
-/* Set ports PA8 (TIM1_CH1), PA9 (TIM1_CH2), PB13 (TIM1_CH1N), PB14 (TIM1_CH2N)
+/* Set ports PA9 (TIM1_CH2), PA10 (TIM1_CH3), PB14 (TIM1_CH2N), PB15 (TIM1_CH3N)
 for PWM, to 'alternate function output push-pull'. */
 	gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_50_MHZ,
-		      GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO8 | GPIO9);
+		      GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO9 | GPIO10);
 	gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ,
-		      GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO13 | GPIO14);
+		      GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO14 | GPIO15);
 
 /* ------------------ Timer 1 PWM */
 /* Enable TIM1 clock. */
@@ -71,16 +73,15 @@ for PWM, to 'alternate function output push-pull'. */
 	timer_set_mode(TIM1, TIM_CR1_CKD_CK_INT, TIM_CR1_CMS_CENTER_1, TIM_CR1_DIR_UP);
 
 /* Set Timer output compare mode:
- * - Channel 1
  * - PWM mode 2 (output low when CNT < CCR1, high otherwise)
- */
-	timer_set_oc_mode(TIM1, TIM_OC1, TIM_OCM_PWM2);
-	timer_enable_oc_output(TIM1, TIM_OC1);
-	timer_enable_oc_output(TIM1, TIM_OC1N);
-/* Channel 2 is the one in use */
+ * Channel 2 is the one to use for buck synchronous mode */
 	timer_set_oc_mode(TIM1, TIM_OC2, TIM_OCM_PWM2);
 	timer_enable_oc_output(TIM1, TIM_OC2);
 	timer_enable_oc_output(TIM1, TIM_OC2N);
+/* Channel 3 */
+	timer_set_oc_mode(TIM1, TIM_OC3, TIM_OCM_PWM2);
+	timer_enable_oc_output(TIM1, TIM_OC3);
+	timer_enable_oc_output(TIM1, TIM_OC3N);
 	timer_enable_break_main_output(TIM1);
 /* Set the polarity of OC2N to be low to match that of the OC, for switching
 the low side MOSFET through an inverting level shifter */
@@ -94,10 +95,10 @@ the low side MOSFET through an inverting level shifter */
 	timer_set_period(TIM1, PERIOD);
 
 /* The CCR1 (capture/compare register 1) sets the PWM duty cycle to default 50% */
-	timer_enable_oc_preload(TIM1, TIM_OC1);
-	timer_set_oc_value(TIM1, TIM_OC1, (PERIOD*20)/100);
 	timer_enable_oc_preload(TIM1, TIM_OC2);
 	timer_set_oc_value(TIM1, TIM_OC2, (PERIOD*50)/100);
+	timer_enable_oc_preload(TIM1, TIM_OC3);
+	timer_set_oc_value(TIM1, TIM_OC3, (PERIOD*20)/100);
 
 /* Force an update to load the shadow registers */
 	timer_generate_event(TIM1, TIM_EGR_UG);
