@@ -1,5 +1,8 @@
 /* STM32F1 Power Management Communications Library Functions
 
+The buffering of receive and send characters is handled here, as well as
+handling of buffer full and empty situations.
+
 Initial 11 December 2015
 */
 
@@ -20,6 +23,8 @@ Initial 11 December 2015
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <libopencm3/cm3/nvic.h>
+#include <libopencm3/stm32/usart.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -28,14 +33,39 @@ Initial 11 December 2015
 #include "stringlib.h"
 #include "commslib.h"
 
-/* Output buffer global */
+/*--------------------------------------------------------------------------*/
+/* Receive and Transmit buffer globals */
 
-char outBuffer[128];
+static uint8_t sendBuffer[BUFFER_SIZE+3];
+static uint8_t receiveBuffer[BUFFER_SIZE+3];
+
+/*--------------------------------------------------------------------------*/
+/** @brief Initialize Communications Buffers
+
+*/
+
+void commsInit(void)
+{
+	buffer_init(sendBuffer,BUFFER_SIZE);
+	buffer_init(receiveBuffer,BUFFER_SIZE);
+	usart_enable_tx_interrupt(USART1);
+}
+
+/*--------------------------------------------------------------------------*/
+/** @brief Return next character from receive buffer
+
+The buffer_get function returns 0x100 if no character is present.
+*/
+
+uint16_t commsNextCharacter(void)
+{
+    return buffer_get(receiveBuffer);
+}
 
 /*--------------------------------------------------------------------------*/
 /** @brief Send a data message with two integer parameters
 
-The message consists of a single character ident followed by two parameters
+The message consists of an identification string followed by two parameters
 in integer ASCII form, all separated by commas, followed by CR-LF.
 
 This is an asynchronous TxPDO in CANopen and therefore is nominally of fixed
@@ -47,28 +77,31 @@ space.
 @param char* ident: an identifier string recognized by the receiving program.
 @param int32_t param1: first integer parameter.
 @param int32_t param2: second integer parameter.
+@returns true if message was buffered.
 */
 
-void dataMessageSend(char* ident, int32_t param1, int32_t param2)
+bool dataMessageSend(char* ident, int32_t param1, int32_t param2)
 {
     char param1Buffer[11];
     char param2Buffer[11];
     intToAscii(param1,param1Buffer);
     intToAscii(param2,param2Buffer);
-    if (buffer_output_space(outBuffer) < 
-        stringLength(param1Buffer)+stringLength(param2Buffer)+5) return;
+    if (buffer_output_places(sendBuffer) < 
+        stringLength(param1Buffer)+stringLength(param2Buffer)+5)
+        return false;
     commsPrintString(ident);
     commsPrintString(",");
     commsPrintString(param1Buffer);
     commsPrintString(",");
     commsPrintString(param2Buffer);
     commsPrintString("\r\n");
+    return true;
 }
 
 /*--------------------------------------------------------------------------*/
 /** @brief Send a data message with one integer parameter
 
-The message consists of a single character ident followed by a parameter
+The message consists of a identification stringt followed by a parameter
 in integer ASCII form, all separated by commas, followed by CR-LF.
 
 Use to send a simple integer response to a command. This will abandon thw
@@ -76,37 +109,43 @@ message if the output buffer is has insufficient space.
 
 @param[in] char* ident. Response identifier string
 @param[in] int32_t parameter. Single integer parameter.
+@returns true if message was buffered.
 */
 
-void sendResponse(char* ident, int32_t parameter)
+bool sendResponse(char* ident, int32_t parameter)
 {
     char paramBuffer[11];
     intToAscii(parameter,paramBuffer);
-    if (buffer_output_space(outBuffer) < stringLength(paramBuffer)+4) return;
+    if (buffer_output_places(sendBuffer) < stringLength(paramBuffer)+4)
+        return false;
     commsPrintString(ident);
     commsPrintString(",");
     commsPrintString(paramBuffer);
     commsPrintString("\r\n");
+    return true;
 }
 
 /*--------------------------------------------------------------------------*/
 /** @brief Send a string
 
-Use to send a string consisting of a single character ident, a comma and a
+Use to send a string consisting of a identification string, a comma and a
 variable length string. This will abandon the message if the output buffer is
 has insufficient space.
 
 @param[in] char* ident. Response identifier string
 @param[in] int32_t parameter. Single integer parameter.
+@returns true if message was buffered.
 */
 
-void sendString(char* ident, char* string)
+bool sendString(char* ident, char* string)
 {
-    if (buffer_output_space(outBuffer) < stringLength(string)+4) return;
+    if (buffer_output_places(sendBuffer) < stringLength(string)+4)
+        return false;
     commsPrintString(ident);
     commsPrintString(",");
     commsPrintString(string);
     commsPrintString("\r\n");
+    return true;
 }
 
 /*--------------------------------------------------------------------------*/
@@ -131,18 +170,42 @@ This is where the characters are queued for the ISR to transmit.
 The ISR is in the hardware module.
 
 Characters are placed on a queue and picked up by the ISR for transmission.
-The application is responsible for protecting a message with semaphores
-to ensure it is sent in entirety (see convenience functions defined here).
-
-If the queue fails to respond it is reset. A number of messages will be lost but
-hopefully the application will continue to run. A receiving program may see
-a corrupted message.
+The application is responsible for ensuring the message is sent in entirety
+(see convenience functions defined here).
 
 @param[in] char *ch: pointer to character to be printed.
 */
 
 void commsPrintChar(char *ch)
 {
+    usart_enable_tx_interrupt(USART1);
+    buffer_put(sendBuffer,*ch);
+    usart_disable_tx_interrupt(USART1);
+}
+
+/*--------------------------------------------------------------------------*/
+/** @brief USART ISR
+
+Find out what interrupted and get or send data as appropriate */
+
+void usart1_isr(void)
+{
+	static uint16_t data;
+
+	/* Check if we were called because of RXNE. */
+	if (usart_get_flag(USART1,USART_SR_RXNE))
+	{
+		/* If buffer full we'll just drop it */
+		buffer_put(receiveBuffer, (uint8_t) usart_recv(USART1));
+	}
+	/* Check if we were called because of TXE. */
+	if (usart_get_flag(USART1,USART_SR_TXE))
+	{
+		/* If buffer empty, disable the tx interrupt */
+		data = buffer_get(sendBuffer);
+		if ((data & 0xFF00) > 0) usart_disable_tx_interrupt(USART1);
+		else usart_send(USART1, (data & 0xFF));
+	}
 }
 
 

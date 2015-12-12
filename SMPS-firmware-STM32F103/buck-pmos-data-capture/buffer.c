@@ -65,7 +65,7 @@ bool buffer_input_available(uint8_t buffer[])
 
 /*--------------------------------------------------------------------------*/
 /* Return number of bytes available in the buffer */
-uint16_t buffer_output_space(uint8_t buffer[])
+uint16_t buffer_output_places(uint8_t buffer[])
 {
     uint16_t space = (buffer[1] - buffer[2]);
     if (buffer[2] > buffer[1]) space = buffer[0] - space;

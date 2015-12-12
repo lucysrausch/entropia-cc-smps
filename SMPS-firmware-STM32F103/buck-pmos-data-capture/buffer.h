@@ -21,7 +21,7 @@ uint16_t buffer_get(uint8_t buffer[]);
 uint16_t buffer_put(uint8_t buffer[], uint8_t data);
 bool buffer_output_free(uint8_t buffer[]);
 bool buffer_input_available(uint8_t buffer[]);
-uint16_t buffer_output_space(uint8_t buffer[]);
+uint16_t buffer_output_places(uint8_t buffer[]);
 
 #endif 
 

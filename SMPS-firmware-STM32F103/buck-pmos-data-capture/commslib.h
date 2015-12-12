@@ -29,9 +29,11 @@ Initial 11 December 2015
 
 #define BUFFER_SIZE 128
 
-void dataMessageSend(char* ident, int32_t parm1, int32_t parm2);
-void sendResponse(char* ident, int32_t parameter);
-void sendString(char* ident, char* string);
+void commsInit(void);
+uint16_t commsNextCharacter(void);
+bool dataMessageSend(char* ident, int32_t parm1, int32_t parm2);
+bool sendResponse(char* ident, int32_t parameter);
+bool sendString(char* ident, char* string);
 void commsPrintString(char *ch);
 void commsPrintChar(char *ch);
 

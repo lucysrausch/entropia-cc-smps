@@ -46,8 +46,6 @@ and to retrieve data captured during a run.
 /* Global Variables */
 uint32_t v[NUM_CHANNEL];                /* Captured data array, one scan */
 uint32_t data[NUM_CHANNEL];             /* Captured data array for the run */
-uint8_t sendBuffer[BUFFER_SIZE+3];
-uint8_t receiveBuffer[BUFFER_SIZE+3];
 uint8_t adceoc;                         /* A/D end of conversion flag */
 /* Settable Parameters */
 uint16_t dataBlockSize;
@@ -72,9 +70,7 @@ int main(void)
 	adcSetup();
 	timer2Setup(0x8FFF);
     timer1SetupPWM();
-	buffer_init(sendBuffer,BUFFER_SIZE);
-	buffer_init(receiveBuffer,BUFFER_SIZE);
-	usart_enable_tx_interrupt(USART1);
+    commsInit();
 
 /* Setup array of selected channels for conversion and clear the data array for
 the first pass */
@@ -89,7 +85,7 @@ the first pass */
 	while (1)
 	{
 /* Build a command line string before actioning. */
-        uint16_t character = buffer_get(sendBuffer);
+        uint16_t character = commsNextCharacter();
         if (character < 0x100)      /* will be 0x100 if no character received */
         {
             if ((character == 0x0D) || (character == 0x0A) ||
@@ -105,7 +101,7 @@ the first pass */
 /* Activate the ADC conversions after the preset time in timer 2 has elapsed. */
 	    if (timer_get_flag(TIM2, TIM_SR_CC1IF) && capture)
         {
-/* Store previous conversion results */
+/* Store previous conversion results, which should be well in by now. */
 	        if (index < dataBlockSize)
             {
                 for (i = 0; i < NUM_CHANNEL; i++)
@@ -415,31 +411,6 @@ void adc1_2_isr(void)
     adceoc = 1;
 /* Clear DMA to restart at beginning of data array */
 	dmaAdcSetup();
-}
-
-/*--------------------------------------------------------------------------*/
-/** @brief USART ISR
-
-Find out what interrupted and get or send data as appropriate */
-
-void usart1_isr(void)
-{
-	static uint16_t data;
-
-	/* Check if we were called because of RXNE. */
-	if (usart_get_flag(USART1,USART_SR_RXNE))
-	{
-		/* If buffer full we'll just drop it */
-		buffer_put(receiveBuffer, (uint8_t) usart_recv(USART1));
-	}
-	/* Check if we were called because of TXE. */
-	if (usart_get_flag(USART1,USART_SR_TXE))
-	{
-		/* If buffer empty, disable the tx interrupt */
-		data = buffer_get(sendBuffer);
-		if ((data & 0xFF00) > 0) usart_disable_tx_interrupt(USART1);
-		else usart_send(USART1, (data & 0xFF));
-	}
 }
 
 /*-----------------------------------------------------------*/
