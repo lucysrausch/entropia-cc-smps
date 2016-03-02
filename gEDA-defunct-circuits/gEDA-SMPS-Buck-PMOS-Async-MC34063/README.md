@@ -11,9 +11,7 @@ such as the SQD50P04 are reasonably priced, readily available and have very low
 on-resistance. The PCB has been designed to carry moderate currents of 5A-10A
 which could be enhanced by use of thicker traces.
 
-More information is provided at:
-
-http://www.jiggerjuice.info/electronics/projects/power/index.html
+More information is provided at [Jiggerjuice](http://www.jiggerjuice.info/electronics/projects/power/index.html
 
 (c) K. Sarkies 15/09/2015
 
