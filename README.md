@@ -23,7 +23,7 @@ to provide useful working circuits.
   provides a template for building a range of experimental circuits up to
   moderately high currents.
 
-More information is provided at [Jiggerjuice](http://www.jiggerjuice.info/electronics/projects/power/index.html
+More information is provided at [Jiggerjuice](http://www.jiggerjuice.info/electronics/projects/power/index.html).
 
 (c) K. Sarkies 24/10/2014
 
