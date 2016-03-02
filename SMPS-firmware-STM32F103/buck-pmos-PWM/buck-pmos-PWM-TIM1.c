@@ -53,6 +53,13 @@ void hardware_setup(void)
 
 /* Set ports PA9 (TIM1_CH2), PA10 (TIM1_CH3), PB14 (TIM1_CH2N), PB15 (TIM1_CH3N)
 for PWM, to 'alternate function output push-pull'. */
+/*	gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_50_MHZ,
+		      GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO9 | GPIO10);
+	gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ,
+		      GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO14 | GPIO15); */
+
+/* Set ports PA9 (TIM1_CH2), PA10 (TIM1_CH3), PB14 (TIM1_CH2N), PB15 (TIM1_CH3N)
+for PWM, to 'alternate function output push-pull'. */
 	gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_50_MHZ,
 		      GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO9 | GPIO10);
 	gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ,

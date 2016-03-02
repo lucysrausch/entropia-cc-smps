@@ -3,6 +3,14 @@
 An ASCII based command-response interface is provided to control a SMPS
 and to retrieve data captured during a run.
 
+Data capture is via the ADC input channels 4 to 7 on PA4-7.
+PWM is from timer 1: CH2 on PA9, CH3 on PA10, CH2N on PB14, CH3N on PB15.
+CH1(N) is the buck synchronous PWM and CH2(N) is the boost synchronous PWM.
+USART2 is the serial communications peripheral (USART1 clashes with timer 1
+and the alternative advanced timer 8 doesn't exist).
+
+- 'aE' Send back identifier string
+- 'ac+' 'ac-' turn on/off data capture.
 - set parameters for capture frequency, PWM duty cycle
 - turn on/off power
 - retrieve next data set
@@ -50,6 +58,9 @@ uint8_t adceoc;                         /* A/D end of conversion flag */
 /* Settable Parameters */
 uint16_t dataBlockSize;
 uint8_t capture;                        /* Activate and stop data capture */
+uint16_t period;                        /* PWM period */
+uint16_t buckDutyCycle;                 /* Duty cycle % for buck converter */
+uint16_t boostDutyCycle;                /* Duty cycle % for boost converter */
 
 /*--------------------------------------------------------------------------*/
 
@@ -60,7 +71,9 @@ int main(void)
 	uint8_t channelArray[NUM_CHANNEL];
     uint8_t characterPosition = 0;
     uint8_t line[LINE_SIZE];
+    capture = false;
     dataBlockSize = DATA_BLOCK_SIZE;
+    uint16_t delay = 0;
 
 /* Initialize peripherals */
 	clockSetup();
@@ -72,21 +85,26 @@ int main(void)
     timer1SetupPWM();
     commsInit();
 
+/* Set initial PWM to safe values. */
+    period = PERIOD;
+    buckDutyCycle = 50;
+    boostDutyCycle = 0;
+    timer1PWMsettings(period, buckDutyCycle, boostDutyCycle);
+
 /* Setup array of selected channels for conversion and clear the data array for
 the first pass */
 	for (i = 0; i < NUM_CHANNEL; i++)
 	{
-		channelArray[i] = i;
+		channelArray[i] = i+4;
 		v[i] = 0;
 	}
 	adc_set_regular_sequence(ADC1, NUM_CHANNEL, channelArray);
 
-/* Continously convert and send data array on each timer trigger. */
 	while (1)
 	{
 /* Build a command line string before actioning. */
         uint16_t character = commsNextCharacter();
-        if (character < 0x100)      /* will be 0x100 if no character received */
+        if (character < 0x100)      /* returns 0x100 if no character received */
         {
             if ((character == 0x0D) || (character == 0x0A) ||
                 (characterPosition > LINE_SIZE-2))
@@ -98,20 +116,27 @@ the first pass */
             else line[characterPosition++] = character;
         }
 
-/* Activate the ADC conversions after the preset time in timer 2 has elapsed. */
+/* Activate the ADC conversions after the preset time in timer 2 has elapsed.
+Without timer 2 prescaler this has a maximum of 2 ms period. */
 	    if (timer_get_flag(TIM2, TIM_SR_CC1IF) && capture)
         {
-/* Store previous conversion results, which should be well in by now. */
-	        if (index < dataBlockSize)
+        	timer_clear_flag(TIM2, TIM_SR_CC1IF);
+/* Delay a bit more to slow down comms to once per second */
+            if (delay++ > 1000)
             {
-                for (i = 0; i < NUM_CHANNEL; i++)
-	            {
-		            data[index++] = v[i];
-	            }
+/* Store previous conversion results, which should be well in by now. */
+	            if (index < dataBlockSize)
+                {
+                    for (i = 0; i < NUM_CHANNEL; i++)
+	                {
+                        dataMessageSend("Channel ",i,v[i]);
+		                data[index++] = v[i];
+	                }
+                }
+    		    adc_start_conversion_regular(ADC1);
+                delay = 0;
             }
-/* Reset timer and initiate data capture */
-        	timer_reset(TIM2);
-		    adc_start_conversion_regular(ADC1);
+/* Reset timer and initiate next data capture */
         }
 	}
 
@@ -139,12 +164,13 @@ void parseCommand(uint8_t* line)
         switch (line[1])
         {
 /* Start capture 'ac+' stop capture 'ac-' */
-        case 'c':
+            case 'c':
             {
                 capture = (line[2] == '+');
+                break;
             }
 /* Send ident response */
-        case 'E':
+            case 'E':
             {
                 char ident[35] = "SMPS,";
                 stringAppend(ident,FIRMWARE_VERSION);
@@ -156,13 +182,25 @@ void parseCommand(uint8_t* line)
 /* Parameter setting commands */
     else if (line[0] == 'p')
     {
-/* Set the timer 2 count to set data sampling intervals */
+/* Set the timer 2 count to set data sampling intervals, only if non zero.*/
         switch (line[1])
         {
-        case 'E':
+            case 'E':
             {
-                uint16_t count = 0x8FFF;
-                timer2Setup(count);
+                uint16_t count = asciiToInt((char*)line+2);
+                if (count > 0) timer2Setup(count);
+                break;
+            }
+        }
+/* Set the timer 1 PWM .*/
+        switch (line[1])
+        {
+            case 'P':
+            {
+                uint16_t buckDutyCycle = 100-asciiToInt((char*)line+2);
+                if (buckDutyCycle <= 100)
+                    timer1PWMsettings(period,buckDutyCycle,boostDutyCycle);
+                break;
             }
         }
     }
@@ -184,34 +222,6 @@ void clockSetup(void)
 }
 
 /*--------------------------------------------------------------------------*/
-/** @brief USART Setup
-
-USART 1 is configured for 115200 baud, no flow control, and interrupt.
-*/
-
-void usartSetup(void)
-{
-/* Enable clocks for GPIO port A (for GPIO_USART1_TX) and USART1. */
-    rcc_periph_clock_enable(RCC_GPIOA);
-    rcc_periph_clock_enable(RCC_AFIO);
-    rcc_periph_clock_enable(RCC_USART1);
-/* Enable the USART1 interrupt. */
-    nvic_enable_irq(NVIC_USART1_IRQ);
-/* Setup USART parameters. */
-    usart_set_baudrate(USART1, BAUDRATE);
-    usart_set_databits(USART1, 8);
-    usart_set_stopbits(USART1, USART_STOPBITS_1);
-    usart_set_parity(USART1, USART_PARITY_NONE);
-    usart_set_flow_control(USART1, USART_FLOWCONTROL_NONE);
-    usart_set_mode(USART1, USART_MODE_TX_RX);
-/* Enable USART1 receive interrupts. */
-    usart_enable_rx_interrupt(USART1);
-    usart_disable_tx_interrupt(USART1);
-/* Finally enable the USART. */
-    usart_enable(USART1);
-}
-
-/*--------------------------------------------------------------------------*/
 /** @brief GPIO Setup
 */
 
@@ -226,23 +236,52 @@ void gpioSetup(void)
 /* Disable SWD and JTAG to allow full use of the ports PA13, PA14, PA15 */
     gpio_primary_remap(AFIO_MAPR_SWJ_CFG_JTAG_OFF_SW_OFF,0);
 
-/* Setup GPIO pin GPIO_USART1_RE_TX on GPIO port A for transmit. */
-    gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_50_MHZ,
-              GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_USART1_TX);
-/* Setup GPIO pin GPIO_USART1_RE_RX on GPIO port A for receive. */
-    gpio_set_mode(GPIOA, GPIO_MODE_INPUT,
-              GPIO_CNF_INPUT_FLOAT, GPIO_USART1_RX);
+/* Setup GPIO pin GPIO_USART2_RE_TX on GPIO port A for transmit. */
+	gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_50_MHZ,
+		      GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_USART2_TX);
+/* Setup GPIO pin GPIO_USART2_RE_RX on GPIO port A for receive. */
+	gpio_set_mode(GPIOA, GPIO_MODE_INPUT,
+		      GPIO_CNF_INPUT_FLOAT, GPIO_USART2_RX);
 
 /* Set ports PA9 (TIM1_CH2), PA10 (TIM1_CH3), PB14 (TIM1_CH2N), PB15 (TIM1_CH3N)
 for PWM, to 'alternate function output push-pull'. */
 	gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_50_MHZ,
-		      GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO9 | GPIO10);
+		      GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO9 | GPIO10 );
 	gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ,
 		      GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO14 | GPIO15);
 
-/* PA inputs 0-3 as analogue for currents, voltages and ambient temperature */
+/* PA inputs 4-7 as analogue for currents, voltages and ambient temperature */
     gpio_set_mode(GPIOA, GPIO_MODE_INPUT, GPIO_CNF_INPUT_ANALOG,
-                GPIO0 | GPIO1 | GPIO2 | GPIO3);
+                GPIO4 | GPIO5 | GPIO6 | GPIO7);
+}
+
+/*--------------------------------------------------------------------------*/
+/** @brief USART Setup
+
+USART 2 is configured for 38400 baud, no flow control, and interrupt.
+*/
+
+void usartSetup(void)
+{
+/* Enable clocks for GPIO port A (for GPIO_USART2_TX) and USART2. */
+    rcc_periph_clock_enable(RCC_GPIOA);
+    rcc_periph_clock_enable(RCC_AFIO);
+    rcc_periph_clock_enable(RCC_USART2);
+/* Enable the USART2 interrupt. */
+    nvic_enable_irq(NVIC_USART2_IRQ);
+/* Setup USART parameters. */
+    usart_set_baudrate(USART2, BAUDRATE);
+    usart_set_databits(USART2, 8);
+    usart_set_stopbits(USART2, USART_STOPBITS_1);
+    usart_set_parity(USART2, USART_PARITY_NONE);
+    usart_set_flow_control(USART2, USART_FLOWCONTROL_NONE);
+    usart_set_mode(USART2, USART_MODE_TX_RX);
+/* Enable USART2 receive interrupts. */
+    usart_enable_rx_interrupt(USART2);
+/* Disable USART2 transmit interrupts. */
+    usart_disable_tx_interrupt(USART2);
+/* Finally enable the USART. */
+    usart_enable(USART2);
 }
 
 /*--------------------------------------------------------------------------*/
@@ -313,12 +352,17 @@ void adcSetup(void)
 /** @brief Timer 1 Setup
 
 Setup timer 1 for PWM on outputs 2 and 3 and their inverse outputs, with
-deadtime setting. */
+deadtime setting.
+
+Note: Need to either select timer 8 (not available on all STM32F103, in
+particular that in the ET-STM32F103 board) or timer 1 with USART1 pins mapped
+to avoid pin clashes.
+*/
 
 void timer1SetupPWM(void)
 {
 /* Enable TIM1 clock. */
-	rcc_peripheral_enable_clock(&RCC_APB2ENR, RCC_APB2ENR_TIM1EN);
+	rcc_periph_clock_enable(RCC_TIM1);
 
 /* Reset TIM1 peripheral. */
 	timer_reset(TIM1);
@@ -336,27 +380,40 @@ void timer1SetupPWM(void)
 	timer_set_oc_mode(TIM1, TIM_OC2, TIM_OCM_PWM2);
 	timer_enable_oc_output(TIM1, TIM_OC2);
 	timer_enable_oc_output(TIM1, TIM_OC2N);
-/* Channel 3 */
+/* Channel 3 is the one used for boost synchronous mode */
 	timer_set_oc_mode(TIM1, TIM_OC3, TIM_OCM_PWM2);
 	timer_enable_oc_output(TIM1, TIM_OC3);
 	timer_enable_oc_output(TIM1, TIM_OC3N);
 	timer_enable_break_main_output(TIM1);
-/* Set the polarity of OC2N to be low to match that of the OC, for switching
+/* Set the polarity of OC1N to be low to match that of the OC1, for switching
 the low side MOSFET through an inverting level shifter */
     timer_set_oc_polarity_low(TIM1, TIM_OC2N);
-/* Set the deadtime for OC2N. All deadtimes are set to this. */
+/* Set the deadtime for OC1N. All deadtimes are set to this.
+Set to default as there is no need to change this on the fly. */
     timer_set_deadtime(TIM1, DEADTIME);
+}
 
+/*--------------------------------------------------------------------------*/
+/** @brief Timer 1 Set PWM Parameters
+
+@param[in] uint16_t period.
+@param[in] uint16_t buckDutyCycle: percentage duty cycle
+@param[in] uint16_t boostDutyCycle.: percentage duty cycle
+*/
+
+void timer1PWMsettings(uint16_t period, uint16_t buckDutyCycle,
+                  uint16_t boostDutyCycle)
+{
 /* The ARR (auto-preload register) sets the PWM period to 62.5kHz from the
 72 MHz clock.*/
 	timer_enable_preload(TIM1);
-	timer_set_period(TIM1, PERIOD);
+	timer_set_period(TIM1, period);
 
-/* The CCR1 (capture/compare register 1) sets the PWM duty cycle to default 50% */
+/* The CCR1 (capture/compare register 1) sets PWM duty cycle to default 50% */
 	timer_enable_oc_preload(TIM1, TIM_OC2);
-	timer_set_oc_value(TIM1, TIM_OC2, (PERIOD*50)/100);
+	timer_set_oc_value(TIM1, TIM_OC2, (period*buckDutyCycle)/100);
 	timer_enable_oc_preload(TIM1, TIM_OC3);
-	timer_set_oc_value(TIM1, TIM_OC3, (PERIOD*20)/100);
+	timer_set_oc_value(TIM1, TIM_OC3, (period*boostDutyCycle)/100);
 
 /* Force an update to load the shadow registers */
 	timer_generate_event(TIM1, TIM_EGR_UG);
@@ -372,7 +429,8 @@ Setup timer 2 to run through a period, preset to the maximum 16 bit value,
 and to set a compare flag when the count reaches a preset value based on the
 output compare channel 1.
 
-@param[in] uint16_t count. */
+@param[in] uint16_t count.
+*/
 
 void timer2Setup(uint16_t count)
 {

@@ -40,7 +40,7 @@ static uint8_t sendBuffer[BUFFER_SIZE+3];
 static uint8_t receiveBuffer[BUFFER_SIZE+3];
 
 /*--------------------------------------------------------------------------*/
-/** @brief Initialize Communications Buffers
+/** @brief Initialize Communications Buffers to Empty
 
 */
 
@@ -48,7 +48,6 @@ void commsInit(void)
 {
 	buffer_init(sendBuffer,BUFFER_SIZE);
 	buffer_init(receiveBuffer,BUFFER_SIZE);
-	usart_enable_tx_interrupt(USART1);
 }
 
 /*--------------------------------------------------------------------------*/
@@ -178,9 +177,9 @@ The application is responsible for ensuring the message is sent in entirety
 
 void commsPrintChar(char *ch)
 {
-    usart_enable_tx_interrupt(USART1);
+    usart_disable_tx_interrupt(USART2);
     buffer_put(sendBuffer,*ch);
-    usart_disable_tx_interrupt(USART1);
+    usart_enable_tx_interrupt(USART2);
 }
 
 /*--------------------------------------------------------------------------*/
@@ -188,24 +187,23 @@ void commsPrintChar(char *ch)
 
 Find out what interrupted and get or send data as appropriate */
 
-void usart1_isr(void)
+void usart2_isr(void)
 {
 	static uint16_t data;
 
 	/* Check if we were called because of RXNE. */
-	if (usart_get_flag(USART1,USART_SR_RXNE))
+	if (usart_get_flag(USART2,USART_SR_RXNE))
 	{
 		/* If buffer full we'll just drop it */
-		buffer_put(receiveBuffer, (uint8_t) usart_recv(USART1));
+		buffer_put(receiveBuffer, (uint8_t) usart_recv(USART2));
 	}
 	/* Check if we were called because of TXE. */
-	if (usart_get_flag(USART1,USART_SR_TXE))
+	if (usart_get_flag(USART2,USART_SR_TXE))
 	{
 		/* If buffer empty, disable the tx interrupt */
 		data = buffer_get(sendBuffer);
-		if ((data & 0xFF00) > 0) usart_disable_tx_interrupt(USART1);
-		else usart_send(USART1, (data & 0xFF));
+		if ((data & 0xFF00) > 0) usart_disable_tx_interrupt(USART2);
+		else usart_send(USART2, (data & 0xFF));
 	}
 }
-
 

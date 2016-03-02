@@ -1,6 +1,6 @@
 # Basic makefile K Sarkies
 
-PROJECT		= buck-pmos-PWM
+PROJECT		= buck-pmos-PWM-TIM1
 PREFIX		= arm-none-eabi
 CC			= $(PREFIX)-gcc
 LD			= $(PREFIX)-gcc

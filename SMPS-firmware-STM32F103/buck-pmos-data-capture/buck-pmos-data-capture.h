@@ -49,6 +49,8 @@ void dmaAdcSetup(void);
 void gpioSetup(void);
 void usartSetup(void);
 void clockSetup(void);
+void timer1PWMsettings(uint16_t period, uint16_t buckDutyCycle,
+                  uint16_t boostDutyCycle);
 
 void parseCommand(uint8_t* line);
 
