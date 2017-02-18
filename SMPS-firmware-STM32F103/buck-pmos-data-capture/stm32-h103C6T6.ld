@@ -1,14 +1,7 @@
-/* Linker script for the Battery Management System
-
-This script is an adaptation of the script used in libopencm3 to define all
-sections independently of libopencm3 and to introduce a section of FLASH
-to store configuration data. */
-
 /*
  * This file is part of the libopencm3 project.
  *
  * Copyright (C) 2009 Uwe Hermann <uwe@hermann-uwe.de>
- * Copyright (C) 2014 K. Sarkies
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,13 +17,13 @@ to store configuration data. */
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* Linker script STM32F103RET6, 512K flash, 64K RAM. */
+/* Linker script for Olimex STM32-H103 (STM32F103C8T6, 128K flash, 20K RAM). */
 
 /* Define memory regions. */
 MEMORY
 {
-	rom (rx) : ORIGIN = 0x08000000, LENGTH = 512K
-	ram (rwx) : ORIGIN = 0x20000000, LENGTH = 64K
+	rom (rx) : ORIGIN = 0x08000000, LENGTH = 64K
+	ram (rwx) : ORIGIN = 0x20000000, LENGTH = 20K
 }
 
 /* Enforce emission of the vector table. */
@@ -101,4 +94,3 @@ Place a bit pattern at the start for testing. */
 }
 
 PROVIDE(_stack = ORIGIN(ram) + LENGTH(ram));
-

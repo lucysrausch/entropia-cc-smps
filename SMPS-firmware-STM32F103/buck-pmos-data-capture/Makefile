@@ -9,7 +9,7 @@ OBJDUMP		= $(PREFIX)-objdump
 GDB			= $(PREFIX)-gdb
 NM 			= $(PREFIX)-nm
 
-DRIVERS_DIR	= /home/ksarkies/Development-Software/arm-library/libopencm3-examples/libopencm3
+DRIVERS_DIR	= /home/niklas/Entropia/libopencm3
 DRIVERS_SRC	= $(DRIVERS_DIR)/lib/stm32/f1
 DRIVERS_INC	= $(DRIVERS_DIR)/include
 
@@ -17,7 +17,7 @@ VPATH += $(DRIVERS_SRC)/ $(DRIVERS_SRC)/../
 
 CFLAGS		+= -Os -g -Wall -Wextra -I$(DRIVERS_INC) \
 		   	   -fno-common -mcpu=cortex-m3 -mthumb -msoft-float -MD -DSTM32F1
-LDSCRIPT	 = stm32-h103RBT6.ld
+LDSCRIPT	 = stm32-h103C6T6.ld
 LDFLAGS		+= -I . -Wl,--start-group -lc -lgcc -lnosys -Wl,--end-group \
 			   -T$(LDSCRIPT) -L$(DRIVERS_DIR)/lib -lopencm3_stm32f1 \
                -nostartfiles -Wl,--gc-sections \
@@ -47,5 +47,3 @@ $(PROJECT).sym: $(PROJECT).elf
 
 clean:
 	rm *.elf *.o *.d *.hex *.list *.sym *.bin
-
-

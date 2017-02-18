@@ -85,13 +85,13 @@ bool dataMessageSend(char* ident, int32_t param1, int32_t param2)
     char param2Buffer[11];
     intToAscii(param1,param1Buffer);
     intToAscii(param2,param2Buffer);
-    if (buffer_output_places(sendBuffer) < 
+    if (buffer_output_places(sendBuffer) <
         stringLength(param1Buffer)+stringLength(param2Buffer)+5)
         return false;
     commsPrintString(ident);
-    commsPrintString(",");
+    commsPrintString(", ");
     commsPrintString(param1Buffer);
-    commsPrintString(",");
+    commsPrintString(", ");
     commsPrintString(param2Buffer);
     commsPrintString("\r\n");
     return true;
@@ -118,7 +118,7 @@ bool sendResponse(char* ident, int32_t parameter)
     if (buffer_output_places(sendBuffer) < stringLength(paramBuffer)+4)
         return false;
     commsPrintString(ident);
-    commsPrintString(",");
+    //commsPrintString(",");
     commsPrintString(paramBuffer);
     commsPrintString("\r\n");
     return true;
@@ -177,6 +177,7 @@ The application is responsible for ensuring the message is sent in entirety
 
 void commsPrintChar(char *ch)
 {
+	  //memset(&sendBuffer[0], 0, sizeof(sendBuffer));
     usart_disable_tx_interrupt(USART2);
     buffer_put(sendBuffer,*ch);
     usart_enable_tx_interrupt(USART2);
@@ -206,4 +207,3 @@ void usart2_isr(void)
 		else usart_send(USART2, (data & 0xFF));
 	}
 }
-

@@ -33,8 +33,8 @@ Initial 7 December 2015
 #define FIRMWARE_VERSION    "0.0"
 
 #define LINE_SIZE           80
-#define NUM_CHANNEL         4
-#define BAUDRATE            38400
+#define NUM_CHANNEL         2
+#define BAUDRATE            230400
 #define PERIOD              200
 #define DEADTIME            30
 #define DATA_BLOCK_SIZE     1024
@@ -49,10 +49,9 @@ void dmaAdcSetup(void);
 void gpioSetup(void);
 void usartSetup(void);
 void clockSetup(void);
-void timer1PWMsettings(uint16_t period, uint16_t buckDutyCycle,
-                  uint16_t boostDutyCycle);
+void timer1PWMsettings(uint16_t period, int16_t buckDutyCycle,
+                  int16_t boostDutyCycle);
 
 void parseCommand(uint8_t* line);
 
 #endif
-
