@@ -35,7 +35,7 @@ Initial 7 December 2015
 #define LINE_SIZE           80
 #define NUM_CHANNEL         2
 #define BAUDRATE            230400
-#define PERIOD              200
+#define FREQUENCY           100
 #define DEADTIME            30
 #define DATA_BLOCK_SIZE     1024
 

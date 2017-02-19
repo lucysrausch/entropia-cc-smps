@@ -58,9 +58,9 @@ uint8_t adceoc;             /* A/D end of conversion flag */
 /* Settable Parameters */
 uint16_t dataBlockSize;
 uint8_t capture;         /* Activate and stop data capture */
-uint16_t period;         /* PWM period */
-int16_t buckDutyCycle;   /* Duty cycle % for buck converter */
-uint16_t boostDutyCycle; /* Duty cycle % for boost converter */
+uint16_t frequency;         /* PWM frequency in kHz */
+int16_t ch1DutyCycle;   /* Duty cycle % for buck converter */
+int16_t ch2DutyCycle; /* Duty cycle % for boost converter */
 int32_t modifier = 0, isValue = 0, setValue = 0;
 
 /*--------------------------------------------------------------------------*/
@@ -74,7 +74,8 @@ int main(void) {
   uint8_t line[LINE_SIZE];
   capture = false;
   dataBlockSize = DATA_BLOCK_SIZE;
-  uint16_t delay = 0;
+  uint16_t comDelay = 0;
+  uint16_t regDelay = 0;
 
   /* Initialize peripherals */
   clockSetup();
@@ -82,16 +83,15 @@ int main(void) {
   usartSetup();
   dmaAdcSetup();
   adcSetup();
-  gpio_clear(GPIOC, GPIO13);
   timer2Setup(0x8FFF);
   timer1SetupPWM();
   commsInit();
 
   /* Set initial PWM to safe values. */
-  period = PERIOD;
-  buckDutyCycle = 50;
-  boostDutyCycle = 0;
-  timer1PWMsettings(period, buckDutyCycle, boostDutyCycle);
+  frequency = FREQUENCY;
+  ch1DutyCycle = 0;
+  ch2DutyCycle = 0;
+  timer1PWMsettings(frequency, ch1DutyCycle, ch2DutyCycle);
 
   /* Setup array of selected channels for conversion and clear the data array
   for
@@ -102,7 +102,7 @@ int main(void) {
   }
   adc_set_regular_sequence(ADC1, NUM_CHANNEL, channelArray);
   commsPrintString("\nAll meow!\n");
-  // gpio_clear(GPIOC, GPIO13); //debug LED
+  gpio_clear(GPIOC, GPIO13); //debug LED
   while (1) {
 
     /* Build a command line string before actioning. */
@@ -124,54 +124,48 @@ int main(void) {
     if (timer_get_flag(TIM2, TIM_SR_CC1IF) && capture) {
       timer_clear_flag(TIM2, TIM_SR_CC1IF);
 
-      /* Delay a bit more to slow down comms to once per second */
-      if (delay++ > 50) {
-        /* Store previous conversion results, which should be well in by now. */
-        // if (index < dataBlockSize)
-        //{
-        for (i = 0; i < NUM_CHANNEL; i++) {
-          dataMessageSend("Channel ", i, v[i]);
-          // data[index++] = v[i];
-        }
-
+      if (regDelay++ > 10) {//every 10ms
         isValue = v[1];
         modifier = setValue - isValue;
-        modifier = (int)(modifier / 100);
+        modifier = (int)(modifier / 50);
 
-        if (modifier == 0 && setValue < isValue - 50) {
+        if (modifier == 0 && setValue < isValue - 10) {
           modifier = -1;
         }
 
-        if (modifier == 0 && setValue > isValue + 50) {
+        if (modifier == 0 && setValue > isValue + 10) {
           modifier = 1;
         }
 
-        buckDutyCycle += modifier;
+        ch1DutyCycle += modifier;
 
-        if (buckDutyCycle > 100) {
-          buckDutyCycle = 100;
+        if (ch1DutyCycle > 1000) {
+          ch1DutyCycle = 1000;
         }
 
-        if (buckDutyCycle < 0) {
-          buckDutyCycle = 0;
+        if (ch1DutyCycle < 0) {
+          ch1DutyCycle = 0;
         }
 
-        timer1PWMsettings(period, 100 - buckDutyCycle, boostDutyCycle);
+        timer1PWMsettings(frequency, ch1DutyCycle, ch2DutyCycle);
+        regDelay = 0;
+      }
+      /* Delay a bit more to slow down comms to once per second */
+      if (comDelay++ > 200) {
+        /* Store previous conversion results, which should be well in by now. */
+        sendResponse("Channel 1: ", v[1]);
+        sendResponse("Channel 2: ", v[0]);
 
         sendResponse("isValue: ", isValue);
         sendResponse("setValue: ", setValue);
 
         sendResponse("modifier: ", modifier);
-        sendResponse("PWM: ", buckDutyCycle);
+        sendResponse("PWM: ", ch1DutyCycle);
 
-        // buckDutyCycle = 100 - buckDutyCycle;
-
-        //}
-        // commsPrintString("New conversion!\n");
-        adc_start_conversion_regular(ADC1);
-        delay = 0;
+        comDelay = 0;
       }
       /* Reset timer and initiate next data capture */
+      adc_start_conversion_regular(ADC1);
     }
   }
 
@@ -218,20 +212,22 @@ void parseCommand(uint8_t *line) {
     /* Set the timer 2 count to set data sampling intervals, only if non zero.*/
     switch (line[1]) {
     case 'f': {
-      uint16_t count = asciiToInt((char *)line + 2);
-      if (count > 0)
-        timer2Setup(count);
-      sendResponse("Changing sampling interval to: ", count);
+      uint16_t tempFrequency = asciiToInt((char *)line + 2);
+      if (tempFrequency > 0 && tempFrequency < 1000) {
+        frequency = tempFrequency;
+        timer1PWMsettings(frequency, ch1DutyCycle, ch2DutyCycle);
+      }
+      sendResponse("Changing PWM frequncy interval to (kHz): ", frequency);
       break;
     }
     }
     /* Set the timer 1 PWM .*/
     switch (line[1]) {
     case 'p': {
-      uint16_t buckDutyCycle = 100 - asciiToInt((char *)line + 2);
-      if (buckDutyCycle <= 100)
-        timer1PWMsettings(period, buckDutyCycle, boostDutyCycle);
-      sendResponse("Changeing PWM duty cycle to: ", buckDutyCycle);
+      uint16_t ch1DutyCycle = asciiToInt((char *)line + 2);
+      if (ch1DutyCycle <= 1000)
+        timer1PWMsettings(frequency, ch1DutyCycle, ch2DutyCycle);
+      sendResponse("Changeing Channel 1 PWM duty cycle to: ", ch1DutyCycle);
       break;
     }
     }
@@ -242,7 +238,7 @@ void parseCommand(uint8_t *line) {
       uint16_t tempSetValue = asciiToInt((char *)line + 2);
       if (tempSetValue <= 4095 && tempSetValue >= 0) {
         setValue = tempSetValue;
-        sendResponse("Changeing setpoint to: ", setValue);
+        sendResponse("Changeing setpoint of Channel 1 to: ", setValue);
       }
 
       break;
@@ -288,8 +284,8 @@ void gpioSetup(void) {
   for PWM, to 'alternate function output push-pull'. */
   gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL,
                 GPIO9 | GPIO10);
-  gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL,
-                GPIO14 | GPIO15);
+  //gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL,
+                //GPIO14 | GPIO15);
 
   /* PA inputs 4-7 as analogue for currents, voltages and ambient temperature */
   gpio_set_mode(GPIOA, GPIO_MODE_INPUT, GPIO_CNF_INPUT_ANALOG,
@@ -422,41 +418,45 @@ void timer1SetupPWM(void) {
    * - PWM mode 2 (output low when CNT < CCR1, high otherwise)
    * Channel 2 is the one to use for buck synchronous mode */
   timer_set_oc_mode(TIM1, TIM_OC2, TIM_OCM_PWM2);
+  //timer_enable_oc_output(TIM1, TIM_OC2N);
   timer_enable_oc_output(TIM1, TIM_OC2);
-  timer_enable_oc_output(TIM1, TIM_OC2N);
   /* Channel 3 is the one used for boost synchronous mode */
   timer_set_oc_mode(TIM1, TIM_OC3, TIM_OCM_PWM2);
+  //timer_enable_oc_output(TIM1, TIM_OC3N);
   timer_enable_oc_output(TIM1, TIM_OC3);
-  timer_enable_oc_output(TIM1, TIM_OC3N);
   timer_enable_break_main_output(TIM1);
   /* Set the polarity of OC1N to be low to match that of the OC1, for switching
   the low side MOSFET through an inverting level shifter */
-  timer_set_oc_polarity_low(TIM1, TIM_OC2N);
+  //timer_set_oc_polarity_low(TIM1, TIM_OC2N);
   /* Set the deadtime for OC1N. All deadtimes are set to this.
   Set to default as there is no need to change this on the fly. */
-  timer_set_deadtime(TIM1, DEADTIME);
+  //timer_set_deadtime(TIM1, DEADTIME);
 }
 
 /*--------------------------------------------------------------------------*/
 /** @brief Timer 1 Set PWM Parameters
 
-@param[in] uint16_t period.
-@param[in] uint16_t buckDutyCycle: percentage duty cycle
-@param[in] uint16_t boostDutyCycle.: percentage duty cycle
+@param[in] uint16_t frequncy in kHz.
+@param[in] uint16_t ch1DutyCycle: promille duty cycle
+@param[in] uint16_t ch2DutyCycle.: promille duty cycle
 */
 
-void timer1PWMsettings(uint16_t period, int16_t buckDutyCycle,
-                       int16_t boostDutyCycle) {
-  /* The ARR (auto-preload register) sets the PWM period to 62.5kHz from the
+void timer1PWMsettings(uint16_t frequency, int16_t ch1DutyCycle,
+                       int16_t ch2DutyCycle) {
+  /* The ARR (auto-preload register) sets the PWM period to frequency (in kHz) from the
   72 MHz clock.*/
   timer_enable_preload(TIM1);
+  uint16_t period = 72000 / frequency;
   timer_set_period(TIM1, period);
+
+  ch1DutyCycle = 1000 - ch1DutyCycle;
+  ch2DutyCycle = 1000 - ch2DutyCycle;
 
   /* The CCR1 (capture/compare register 1) sets PWM duty cycle to default 50% */
   timer_enable_oc_preload(TIM1, TIM_OC2);
-  timer_set_oc_value(TIM1, TIM_OC2, (period * buckDutyCycle) / 100);
+  timer_set_oc_value(TIM1, TIM_OC2, (period * ch1DutyCycle) / 1000);
   timer_enable_oc_preload(TIM1, TIM_OC3);
-  timer_set_oc_value(TIM1, TIM_OC3, (period * boostDutyCycle) / 100);
+  timer_set_oc_value(TIM1, TIM_OC3, (period * ch2DutyCycle) / 1000);
 
   /* Force an update to load the shadow registers */
   timer_generate_event(TIM1, TIM_EGR_UG);
